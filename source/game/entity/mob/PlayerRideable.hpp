@@ -1,0 +1,8 @@
+#ifndef GAME_ENTITY_MOB_PLAYERRIDEABLE_HPP
+#define GAME_ENTITY_MOB_PLAYERRIDEABLE_HPP
+
+class PlayerRideable
+{
+};
+
+#endif

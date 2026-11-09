@@ -1,0 +1,11 @@
+#include "game/ui/FJ_Label_White_Small_Centered.hpp"
+
+FJ_Label* FJ_Label_White_Small_Centered::Create(fuiRenderNode* pRenderNode)
+{
+    return new FJ_Label_White_Small_Centered(pRenderNode);
+}
+
+unsigned int FJ_Label_White_Small_Centered::getType()
+{
+    return 0x808c;
+}

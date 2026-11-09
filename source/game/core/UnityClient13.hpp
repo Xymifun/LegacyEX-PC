@@ -1,0 +1,9 @@
+#ifndef GAME_CORE_UNITYCLIENT13_HPP
+#define GAME_CORE_UNITYCLIENT13_HPP
+
+class ResourceLocation;
+
+extern ResourceLocation UnityClient13TextureLocation_0x7A;
+extern ResourceLocation UnityClient13TextureLocation_0x7B;
+
+#endif

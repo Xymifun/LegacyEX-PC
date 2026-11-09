@@ -1,0 +1,5 @@
+# Files scripts/format-source.py leaves in their current layout (paths relative to source/).
+# Reformatting these changes their compiled code even though their tokens are unchanged.
+# Found by scripts/format-verify-objects.py.
+game/core/Voteable.cpp
+game/world/block/JukeboxBlock.cpp

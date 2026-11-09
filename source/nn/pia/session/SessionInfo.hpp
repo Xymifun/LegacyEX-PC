@@ -1,0 +1,6 @@
+#ifndef LEGACY_CONSOLE_WIIU_NN_PIA_SESSION_SESSION_INFO_HPP
+#define LEGACY_CONSOLE_WIIU_NN_PIA_SESSION_SESSION_INFO_HPP
+
+#include "nn/pia/session/ISessionInfo.hpp"
+
+#endif

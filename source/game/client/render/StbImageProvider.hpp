@@ -1,0 +1,6 @@
+#ifndef GAME_CLIENT_RENDER_STBIMAGEPROVIDER_HPP
+#define GAME_CLIENT_RENDER_STBIMAGEPROVIDER_HPP
+
+#include <stb_image.h>
+
+#endif

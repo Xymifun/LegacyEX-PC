@@ -1,0 +1,12 @@
+/build/
+/out/
+*.o
+*.obj
+*.a
+*.lib
+*.log
+__pycache__/
+
+# Generated from your own copy of the game by tools/prepare.py
+/source/platform/wiiu/shaders/
+/assets/

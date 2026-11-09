@@ -1,0 +1,13 @@
+#ifndef GAME_WORLD_GENERATION_SMOOTHZOOMLAYER_HPP
+#define GAME_WORLD_GENERATION_SMOOTHZOOMLAYER_HPP
+#include <boost/shared_ptr.hpp>
+#include "game/world/generation/Layer.hpp"
+#include "game/world/biome/arrayWithLength.hpp"
+class SmoothZoomLayer : public Layer
+{
+public:
+    SmoothZoomLayer(long long seed, boost::shared_ptr<Layer> parent);
+    virtual arrayWithLength<int> getArea(int x, int z, int width, int height);
+    static boost::shared_ptr<Layer> zoom(long long seed, boost::shared_ptr<Layer> parent, int count);
+};
+#endif

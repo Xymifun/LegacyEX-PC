@@ -1,0 +1,6 @@
+#ifndef LEGACY_CONSOLE_WIIU_NN_PIA_COMMON_FIXED_STRING_HPP
+#define LEGACY_CONSOLE_WIIU_NN_PIA_COMMON_FIXED_STRING_HPP
+
+#include "nn/pia/String.hpp"
+
+#endif

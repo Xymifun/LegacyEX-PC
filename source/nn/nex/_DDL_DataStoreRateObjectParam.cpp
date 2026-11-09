@@ -1,0 +1,117 @@
+#include "nn/nex/_DDL_DataStoreRateObjectParam.hpp"
+
+#include <algorithm>
+
+#include "nn/nex/DDLSerialization.hpp"
+#include "nn/nex/Message.hpp"
+
+namespace nn
+{
+namespace nex
+{
+
+namespace
+{
+
+const uint8_t RATE_OBJECT_PARAM_MAX_STRUCTURE_VERSION = 0;
+
+}
+
+_DDL_DataStoreRateObjectParam& _DDL_DataStoreRateObjectParam::operator=(const _DDL_DataStoreRateObjectParam& rSource)
+{
+    m_uiStructureVersion = rSource.m_uiStructureVersion;
+    m_iRatingValue = rSource.m_iRatingValue;
+    m_uiAccessPassword = rSource.m_uiAccessPassword;
+    return *this;
+}
+
+void _DDL_DataStoreRateObjectParam::Add(Message* pMessage, const _DDL_DataStoreRateObjectParam& rSource)
+{
+    unsigned int uiSizePosition = 0;
+    const bool bCompactFormat = pMessage->IsCompactFormat();
+
+    if (!bCompactFormat)
+    {
+        uint8_t uiVersion = rSource.m_uiStructureVersion;
+        uint8_t uiMaxVersion = RATE_OBJECT_PARAM_MAX_STRUCTURE_VERSION;
+
+        _Type_byte::Add(pMessage, std::min(uiVersion, uiMaxVersion));
+
+        uiSizePosition = pMessage->GetLength();
+
+        const uint32_t uiSize = 0;
+        _Type_uint32::Add(pMessage, uiSize);
+    }
+
+    pMessage->Append(reinterpret_cast<const unsigned char*>(&rSource.m_iRatingValue), 4, 1);
+    pMessage->Append(reinterpret_cast<const unsigned char*>(&rSource.m_uiAccessPassword), 8, 1);
+
+    if (!bCompactFormat)
+    {
+        const unsigned int uiEndPosition = pMessage->GetLength();
+
+        pMessage->SetLength(uiSizePosition);
+
+        _Type_uint32::Add(pMessage, uiEndPosition - uiSizePosition - sizeof(uint32_t));
+        pMessage->SetLength(uiEndPosition);
+    }
+}
+
+void _DDL_DataStoreRateObjectParam::Extract(Message* pMessage, _DDL_DataStoreRateObjectParam* pDestination)
+{
+    pDestination->m_uiStructureVersion = 0;
+
+    const bool bCompactFormat = pMessage->IsCompactFormat();
+    uint32_t uiSize = 0;
+
+    if (!bCompactFormat)
+    {
+        pMessage->ExtractPrimitive(&pDestination->m_uiStructureVersion);
+
+        if (pMessage->HasError())
+        {
+            return;
+        }
+
+        pMessage->ExtractPrimitive(&uiSize);
+
+        if (pMessage->HasError())
+        {
+            return;
+        }
+    }
+
+    const unsigned int uiStartPosition = pMessage->GetPosition();
+
+    if (pMessage->HasError())
+    {
+        return;
+    }
+
+    pMessage->ExtractPrimitive(&pDestination->m_iRatingValue);
+
+    if (pMessage->HasError())
+    {
+        return;
+    }
+
+    pMessage->ExtractPrimitive(&pDestination->m_uiAccessPassword);
+
+    if (pMessage->HasError() || bCompactFormat)
+    {
+        return;
+    }
+
+    const unsigned int uiEndPosition = uiStartPosition + uiSize;
+
+    if (pMessage->GetPosition() <= uiEndPosition && uiEndPosition <= pMessage->GetLength())
+    {
+        pMessage->SetPosition(uiEndPosition);
+        return;
+    }
+
+    pMessage->SetError();
+}
+
+}
+}

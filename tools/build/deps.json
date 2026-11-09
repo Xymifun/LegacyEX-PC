@@ -1,0 +1,69 @@
+{
+  "zlib": {
+    "url": "https://zlib.net/fossils/zlib-1.2.5.tar.gz",
+    "strip": "zlib-1.2.5",
+    "dest": "zlib",
+    "version": "1.2.5",
+    "license": "zlib License",
+    "tree_sha256": "cf5737bd33b6305e971e67b079b5a224db494023c56bba3d4ce1b161b164ed52"
+  },
+  "libpng": {
+    "url": "https://codeload.github.com/pnggroup/libpng/tar.gz/refs/tags/v1.6.2",
+    "strip": "libpng-1.6.2",
+    "dest": "libpng",
+    "version": "1.6.2",
+    "license": "libpng License",
+    "tree_sha256": "37fb8c7505bd360dc8b6a23a1392645a9cbfb06783437e4cc6e7bd82a78ca881"
+  },
+  "curl": {
+    "url": "https://curl.se/download/curl-7.38.0.tar.gz",
+    "strip": "curl-7.38.0",
+    "subdir": "include/curl",
+    "dest": "curl/include/curl",
+    "version": "7.38.0",
+    "license": "curl License",
+    "tree_sha256": "a9db8a5f64430d446ec2b37f49d667edefa6fab7dd1b69c248e2cb99cd10491e"
+  },
+  "boost": {
+    "url": "https://archives.boost.io/release/1.53.0/source/boost_1_53_0.tar.gz",
+    "strip": "boost_1_53_0",
+    "subdir": "boost",
+    "dest": "boost/boost",
+    "version": "1.53.0",
+    "license": "Boost Software License 1.0",
+    "tree_sha256": "4309bce948c6cd99a62ab5b88a54f824fc4abef90d520776fff8f4bd2ed856f7"
+  },
+  "stb_image": {
+    "url": "https://raw.githubusercontent.com/nothings/stb/ec9db6f84b39988a6a3375058e97598fe63fca4e/stb_image.h",
+    "kind": "file",
+    "dest": "stb",
+    "version": "2.13 (ec9db6f)",
+    "license": "public domain or MIT",
+    "tree_sha256": "dc33c28a6a1bcbdd5f2c52a719cdfe6a99ebb46992e9822031e076bd5642b104"
+  },
+  "wut": {
+    "url": "https://codeload.github.com/Jacobwasbeast/wut/tar.gz/31d8e6a396278b6eb6195b9c2abf1ad6250d16ae",
+    "strip": "wut-31d8e6a396278b6eb6195b9c2abf1ad6250d16ae",
+    "dest": "wut",
+    "version": "devkitPro/wut with the legacy-console-recon changes (31d8e6a)",
+    "license": "zlib License",
+    "tree_sha256": "e58b0983345487ebc5c6e9a868020486630574a5cec9b3e90901257ca9886934"
+  },
+  "lua": {
+    "url": "https://www.lua.org/ftp/lua-5.4.9.tar.gz",
+    "strip": "lua-5.4.9",
+    "subdir": "src",
+    "dest": "lua",
+    "version": "5.4.9",
+    "license": "MIT License",
+    "tree_sha256": "7203cd958527fcc67fb011b64f73fa6435de2df73958d77049d0214a88ee120d"
+  },
+  "opus": {
+    "url": "https://downloads.xiph.org/releases/opus/opus-1.5.2.tar.gz",
+    "strip": "opus-1.5.2",
+    "dest": "opus",
+    "version": "1.5.2",
+    "license": "BSD 3-Clause License",
+    "tree_sha256": "3589c1b0556bea290fa33c68b48050e10751423b20d80742241d4aa4c1c12122"
+  }
+}

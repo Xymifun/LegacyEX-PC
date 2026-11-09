@@ -1,0 +1,112 @@
+#ifndef GAME_CORE_ACHIEVEMENTS_HPP
+#define GAME_CORE_ACHIEVEMENTS_HPP
+
+class Achievement;
+
+class Achievements
+{
+public:
+    static void staticCtor();
+    static void init();
+
+    static Achievement* openInventory;
+    static Achievement* mineWood;
+    static Achievement* buildWorkBench;
+    static Achievement* buildPickaxe;
+    static Achievement* buildFurnace;
+    static Achievement* acquireIron;
+    static Achievement* buildHoe;
+    static Achievement* makeBread;
+    static Achievement* bakeCake;
+    static Achievement* buildBetterPickaxe;
+    static Achievement* cookFish;
+    static Achievement* onARail;
+    static Achievement* buildSword;
+    static Achievement* killEnemy;
+    static Achievement* killCow;
+    static Achievement* flyPig;
+    static Achievement* snipeSkeleton;
+    static Achievement* diamonds;
+    static Achievement* ghast;
+    static Achievement* blazeRod;
+    static Achievement* potion;
+    static Achievement* theEnd;
+    static Achievement* theEnd2;
+    static Achievement* enchantments;
+    static Achievement* leaderOfThePack;
+    static Achievement* MOARTools;
+    static Achievement* dispenseWithThis;
+    static Achievement* InToTheNether;
+    static Achievement* socialPost;
+    static Achievement* eatPorkChop;
+    static Achievement* play100Days;
+    static Achievement* arrowKillCreeper;
+    static Achievement* mine100Blocks;
+    static Achievement* kill10Creepers;
+    static Achievement* overkill;
+    static Achievement* bookcase;
+    static Achievement* adventuringTime;
+    static Achievement* repopulation;
+    static Achievement* diamondsToYou;
+    static Achievement* theHaggler;
+    static Achievement* potPlanter;
+    static Achievement* itsASign;
+    static Achievement* ironBelly;
+    static Achievement* haveAShearfulDay;
+    static Achievement* rainbowCollection;
+    static Achievement* stayingFrosty;
+    static Achievement* chestfulOfCobblestone;
+    static Achievement* renewableEnergy;
+    static Achievement* musicToMyEars;
+    static Achievement* bodyGuard;
+    static Achievement* ironMan;
+    static Achievement* zombieDoctor;
+    static Achievement* lionTamer;
+    static Achievement* breedCow;
+    static Achievement* spawnWither;
+    static Achievement* killWither;
+    static Achievement* fullBeacon;
+    static Achievement* exploreAllBiomes;
+    static Achievement* overpowered;
+    static Achievement* theDyeOutfit;
+    static Achievement* trampoline;
+    static Achievement* theStudent;
+    static Achievement* hasBecomeTheMaster;
+    static Achievement* tisButAScratch;
+    static Achievement* cupid;
+    static Achievement* youWontLikeMeWhenImHungry;
+    static Achievement* mine;
+    static Achievement* theEndAgain;
+    static Achievement* youNeedAMint;
+    static Achievement* superSonic;
+    static Achievement* drySpell;
+    static Achievement* freeDiver;
+    static Achievement* superFuel;
+    static Achievement* saddleUp;
+    static Achievement* tasteOfYourOwnMedicine;
+    static Achievement* beamMeUp;
+    static Achievement* mapRoom;
+    static Achievement* camouflage;
+    static Achievement* backFromTheDead;
+    static Achievement* equipYourFists;
+    static Achievement* tenaciousBall;
+    static Achievement* deadshot;
+    static Achievement* suckMySnowballs;
+    static Achievement* mountainTop;
+    static Achievement* willLikeNoOther;
+    static Achievement* theDeepEnd;
+    static Achievement* greatViewFromUpHere;
+    static Achievement* changeOfSheets;
+    static Achievement* cheatingDeath;
+    static Achievement* soIGotThatGoingForMe;
+    static Achievement* letItGo;
+    static Achievement* feelingIll;
+    static Achievement* _1234Pickle;
+    static Achievement* alternativeFuel;
+    static Achievement* moskstraumen;
+    static Achievement* castaway;
+    static Achievement* sleepWithTheFishes;
+    static Achievement* echolocation;
+};
+
+#endif

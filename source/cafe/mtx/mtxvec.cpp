@@ -1,0 +1,197 @@
+#include <cafe/mtx.h>
+
+#include <math.h>
+
+extern "C"
+{
+void ASM_MTXMultVec(const Mtx m, const Vec* src, Vec* dst)
+{
+    Vec vTmp;
+
+    vTmp.x = m[0][3] + ((m[0][2] * src->z) + ((m[0][0] * src->x) + (m[0][1] * src->y)));
+    vTmp.y = m[1][3] + ((m[1][2] * src->z) + ((m[1][0] * src->x) + (m[1][1] * src->y)));
+    vTmp.z = m[2][3] + ((m[2][2] * src->z) + ((m[2][0] * src->x) + (m[2][1] * src->y)));
+    dst->x = vTmp.x;
+    dst->y = vTmp.y;
+    dst->z = vTmp.z;
+}
+
+void ASM_MTXMultVecArray(const Mtx m, const Vec* srcBase, Vec* dstBase, u32 count)
+{
+    u32 i;
+    Vec vTmp;
+
+    for (i = 0; i < count; i++)
+    {
+        vTmp.x = m[0][3] + ((m[0][2] * srcBase->z) + ((m[0][0] * srcBase->x) + (m[0][1] * srcBase->y)));
+        vTmp.y = m[1][3] + ((m[1][2] * srcBase->z) + ((m[1][0] * srcBase->x) + (m[1][1] * srcBase->y)));
+        vTmp.z = m[2][3] + ((m[2][2] * srcBase->z) + ((m[2][0] * srcBase->x) + (m[2][1] * srcBase->y)));
+        dstBase->x = vTmp.x;
+        dstBase->y = vTmp.y;
+        dstBase->z = vTmp.z;
+        srcBase++;
+        dstBase++;
+    }
+}
+
+void ASM_MTXMultVecArraySR(const Mtx m, const Vec* srcBase, Vec* dstBase, u32 count)
+{
+    u32 i;
+    Vec vTmp;
+
+    for (i = 0; i < count; i++)
+    {
+        vTmp.x = (m[0][2] * srcBase->z) + ((m[0][0] * srcBase->x) + (m[0][1] * srcBase->y));
+        vTmp.y = (m[1][2] * srcBase->z) + ((m[1][0] * srcBase->x) + (m[1][1] * srcBase->y));
+        vTmp.z = (m[2][2] * srcBase->z) + ((m[2][0] * srcBase->x) + (m[2][1] * srcBase->y));
+        dstBase->x = vTmp.x;
+        dstBase->y = vTmp.y;
+        dstBase->z = vTmp.z;
+        srcBase++;
+        dstBase++;
+    }
+}
+
+void ASM_MTXMultVecSR(const Mtx m, const Vec* src, Vec* dst)
+{
+    Vec vTmp;
+
+    vTmp.x = (m[0][2] * src->z) + ((m[0][0] * src->x) + (m[0][1] * src->y));
+    vTmp.y = (m[1][2] * src->z) + ((m[1][0] * src->x) + (m[1][1] * src->y));
+    vTmp.z = (m[2][2] * src->z) + ((m[2][0] * src->x) + (m[2][1] * src->y));
+    dst->x = vTmp.x;
+    dst->y = vTmp.y;
+    dst->z = vTmp.z;
+}
+
+void C_MTXMultVec(const Mtx m, const Vec* src, Vec* dst)
+{
+    Vec vTmp;
+
+    vTmp.x = m[0][3] + ((m[0][2] * src->z) + ((m[0][0] * src->x) + (m[0][1] * src->y)));
+    vTmp.y = m[1][3] + ((m[1][2] * src->z) + ((m[1][0] * src->x) + (m[1][1] * src->y)));
+    vTmp.z = m[2][3] + ((m[2][2] * src->z) + ((m[2][0] * src->x) + (m[2][1] * src->y)));
+    dst->x = vTmp.x;
+    dst->y = vTmp.y;
+    dst->z = vTmp.z;
+}
+
+void C_MTXMultVecArray(const Mtx m, const Vec* srcBase, Vec* dstBase, u32 count)
+{
+    u32 i;
+    Vec vTmp;
+
+    for (i = 0; i < count; i++)
+    {
+        vTmp.x = m[0][3] + ((m[0][2] * srcBase->z) + ((m[0][0] * srcBase->x) + (m[0][1] * srcBase->y)));
+        vTmp.y = m[1][3] + ((m[1][2] * srcBase->z) + ((m[1][0] * srcBase->x) + (m[1][1] * srcBase->y)));
+        vTmp.z = m[2][3] + ((m[2][2] * srcBase->z) + ((m[2][0] * srcBase->x) + (m[2][1] * srcBase->y)));
+        dstBase->x = vTmp.x;
+        dstBase->y = vTmp.y;
+        dstBase->z = vTmp.z;
+        srcBase++;
+        dstBase++;
+    }
+}
+
+void C_MTXMultVecArraySR(const Mtx m, const Vec* srcBase, Vec* dstBase, u32 count)
+{
+    u32 i;
+    Vec vTmp;
+
+    for (i = 0; i < count; i++)
+    {
+        vTmp.x = (m[0][2] * srcBase->z) + ((m[0][0] * srcBase->x) + (m[0][1] * srcBase->y));
+        vTmp.y = (m[1][2] * srcBase->z) + ((m[1][0] * srcBase->x) + (m[1][1] * srcBase->y));
+        vTmp.z = (m[2][2] * srcBase->z) + ((m[2][0] * srcBase->x) + (m[2][1] * srcBase->y));
+        dstBase->x = vTmp.x;
+        dstBase->y = vTmp.y;
+        dstBase->z = vTmp.z;
+        srcBase++;
+        dstBase++;
+    }
+}
+
+void C_MTXMultVecSR(const Mtx m, const Vec* src, Vec* dst)
+{
+    Vec vTmp;
+
+    vTmp.x = (m[0][2] * src->z) + ((m[0][0] * src->x) + (m[0][1] * src->y));
+    vTmp.y = (m[1][2] * src->z) + ((m[1][0] * src->x) + (m[1][1] * src->y));
+    vTmp.z = (m[2][2] * src->z) + ((m[2][0] * src->x) + (m[2][1] * src->y));
+    dst->x = vTmp.x;
+    dst->y = vTmp.y;
+    dst->z = vTmp.z;
+}
+
+void C_MTXROMultVecArray(const ROMtx m, const Vec* srcBase, Vec* dstBase, u32 count)
+{
+    for (u32 i = 0; i < count; ++i)
+    {
+        Vec vTmp = srcBase[i];
+        dstBase[i].x = m[0][0] * vTmp.x + m[1][0] * vTmp.y + m[2][0] * vTmp.z + m[3][0];
+        dstBase[i].y = m[0][1] * vTmp.x + m[1][1] * vTmp.y + m[2][1] * vTmp.z + m[3][1];
+        dstBase[i].z = m[0][2] * vTmp.x + m[1][2] * vTmp.y + m[2][2] * vTmp.z + m[3][2];
+    }
+}
+
+void PSMTXMultVec(const Mtx m, const Vec* src, Vec* dst)
+{
+    Vec vTmp;
+
+    vTmp.x = m[0][3] + ((m[0][2] * src->z) + ((m[0][0] * src->x) + (m[0][1] * src->y)));
+    vTmp.y = m[1][3] + ((m[1][2] * src->z) + ((m[1][0] * src->x) + (m[1][1] * src->y)));
+    vTmp.z = m[2][3] + ((m[2][2] * src->z) + ((m[2][0] * src->x) + (m[2][1] * src->y)));
+    dst->x = vTmp.x;
+    dst->y = vTmp.y;
+    dst->z = vTmp.z;
+}
+
+void PSMTXMultVecArray(const Mtx m, const Vec* srcBase, Vec* dstBase, u32 count)
+{
+    u32 i;
+    Vec vTmp;
+
+    for (i = 0; i < count; i++)
+    {
+        vTmp.x = m[0][3] + ((m[0][2] * srcBase->z) + ((m[0][0] * srcBase->x) + (m[0][1] * srcBase->y)));
+        vTmp.y = m[1][3] + ((m[1][2] * srcBase->z) + ((m[1][0] * srcBase->x) + (m[1][1] * srcBase->y)));
+        vTmp.z = m[2][3] + ((m[2][2] * srcBase->z) + ((m[2][0] * srcBase->x) + (m[2][1] * srcBase->y)));
+        dstBase->x = vTmp.x;
+        dstBase->y = vTmp.y;
+        dstBase->z = vTmp.z;
+        srcBase++;
+        dstBase++;
+    }
+}
+
+void PSMTXMultVecArraySR(const Mtx m, const Vec* srcBase, Vec* dstBase, u32 count)
+{
+    u32 i;
+    Vec vTmp;
+
+    for (i = 0; i < count; i++)
+    {
+        vTmp.x = (m[0][2] * srcBase->z) + ((m[0][0] * srcBase->x) + (m[0][1] * srcBase->y));
+        vTmp.y = (m[1][2] * srcBase->z) + ((m[1][0] * srcBase->x) + (m[1][1] * srcBase->y));
+        vTmp.z = (m[2][2] * srcBase->z) + ((m[2][0] * srcBase->x) + (m[2][1] * srcBase->y));
+        dstBase->x = vTmp.x;
+        dstBase->y = vTmp.y;
+        dstBase->z = vTmp.z;
+        srcBase++;
+        dstBase++;
+    }
+}
+
+void PSMTXMultVecSR(const Mtx m, const Vec* src, Vec* dst)
+{
+    Vec vTmp;
+
+    vTmp.x = (m[0][2] * src->z) + ((m[0][0] * src->x) + (m[0][1] * src->y));
+    vTmp.y = (m[1][2] * src->z) + ((m[1][0] * src->x) + (m[1][1] * src->y));
+    vTmp.z = (m[2][2] * src->z) + ((m[2][0] * src->x) + (m[2][1] * src->y));
+    dst->x = vTmp.x;
+    dst->y = vTmp.y;
+    dst->z = vTmp.z;
+}
+}
