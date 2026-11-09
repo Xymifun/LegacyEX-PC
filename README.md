@@ -58,7 +58,7 @@ However, if you have a hold of the "MinecraftLegacyEX-PC-assets.zip" file, you c
 This was made from an unfinished decompilation released by Jacobwasbeast at https://github.com/Jacobwasbeast/mcwiiu-reconstructed. The edited version is also known as "LCEReborn"
 The decompilation was made with AI, which this PC Port is built from, so consider this build touched by Generative AI by default unlike other purely human-coded versions like neoLegacy.
 
-For a detailed list for parts I got additional help with:
+For a detailed list for parts I got additional help with (keep in mind this list was made after I finished, from memory):
 ###### Initially tearing out all the load-bearing Wii U-dependent stuff so it can boot on PC
 ###### Improving my mouse function so it behaves like an actual mouse instead of moving around like a joystick
 ###### Sorting the glyphs for the Xbox / PS3 (the graphics were messy in the Wii files)
