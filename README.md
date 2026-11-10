@@ -48,7 +48,7 @@ wine MinecraftPC.exe
 
 # Features of LegacyEX
 
-## For a list of changes I made from the raw decompilation:
+## For a list of changes I made from the raw decompilation, which have been extremely well-received by hundreds of players:
 
 Works on PC
 
@@ -209,11 +209,13 @@ Checking Public Minigames shows an "(X Available)" label next to them so you don
 Keep in mind this is barebones for developers who want a proper look at the source code (to check up on what's under the hood and how reliable the code is).
 
 Various things like the TU0 files, extra tutorial worlds, title logos, panoramas and other optional cosmetic content aren't included on this page due to copyright
+
 If you have a "MinecraftLegacyEX-PC-assets.zip" file, you can use "python3 tools/prepare.py --base <base game dump> --update <update dump> [--assets-zip <assets zip>]"
 
 ## Decompilation
 
 This was made from an unfinished decompilation released by Jacobwasbeast at https://github.com/Jacobwasbeast/mcwiiu-reconstructed. The edited version is also known as "LCEReborn"
+
 The decompilation was made with AI, which this PC Port is built from, so consider this build touched by Generative AI by default unlike other purely human-coded versions like neoLegacy.
 
 For a detailed list for parts I got additional help with (keep in mind this list was made after I finished, from memory):
