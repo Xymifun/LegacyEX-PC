@@ -208,8 +208,8 @@ Checking Public Minigames shows an "(X Available)" label next to them so you don
 
 Keep in mind this is barebones for developers who want a proper look at the source code (to check up on what's under the hood and how reliable the code is).
 
-Various things like the TU0 files, extra tutorial worlds, title logos and other optional cosmetic content aren't included on this page due to copyright
-However, if you have a hold of the "MinecraftLegacyEX-PC-assets.zip" file, you can use "python3 tools/prepare.py --base <base game dump> --update <update dump> [--assets-zip <assets zip>]"
+Various things like the TU0 files, extra tutorial worlds, title logos, panoramas and other optional cosmetic content aren't included on this page due to copyright
+If you have a "MinecraftLegacyEX-PC-assets.zip" file, you can use "python3 tools/prepare.py --base <base game dump> --update <update dump> [--assets-zip <assets zip>]"
 
 ## Decompilation
 
