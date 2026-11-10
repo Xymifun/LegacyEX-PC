@@ -1,4 +1,7 @@
 #include "game/world/block/BlockEntity.hpp"
+#ifdef MINECRAFT_PC
+#include "platform/pc/PcModHooks.hpp"
+#endif
 #include "game/core/EntityType.hpp"
 
 #include <map>
@@ -282,6 +285,9 @@ void BlockEntity::staticCtor()
     Register(25, BedBlockEntity::create, BlockEntityType::BED, L"bed");
     Register(26, CauldronBlockEntity::create, BlockEntityType::CAULDRON, L"cauldron");
     Register(27, ConduitBlockEntity::create, BlockEntityType::CONDUIT, L"conduit");
+#ifdef MINECRAFT_PC
+    PcModHooksAddBlockEntities();
+#endif
 }
 
 void BlockEntity::Register(int id, Creator creator, unsigned long long type, std::wstring name)

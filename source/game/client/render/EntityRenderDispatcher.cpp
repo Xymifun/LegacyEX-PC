@@ -1,4 +1,7 @@
 #include "game/client/render/EntityRenderDispatcher.hpp"
+#ifdef MINECRAFT_PC
+#include "platform/pc/PcModHooks.hpp"
+#endif
 #include "game/core/EntityType.hpp"
 
 #include "game/client/render/AreaEffectCloudRenderer.hpp"
@@ -232,6 +235,9 @@ EntityRenderDispatcher::EntityRenderDispatcher(Textures* textures, ItemRenderer*
     mPlayerRenderers[defaultModel] = mPlayerRenderer;
     mPlayerRenderers[EPLAYER_MODEL_SLIM] = new PlayerRenderer(this, false, true);
     mPlayerRenderers[EPLAYER_MODEL_SLIM_64] = new PlayerRenderer(this, true, true);
+#ifdef MINECRAFT_PC
+    PcModHooksAddRenderers(this);
+#endif
     GlStateManager::disableLighting();
     mRenderingGuiPlayer = false;
     mRenderLeash = false;

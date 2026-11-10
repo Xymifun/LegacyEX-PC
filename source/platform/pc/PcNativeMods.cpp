@@ -1,4 +1,5 @@
 #include "platform/pc/PcNativeMods.hpp"
+#include "platform/pc/PcModHooks.hpp"
 
 #include "platform/pc/PcDedicated.hpp"
 #include "platform/pc/PcMods.hpp"
@@ -27,6 +28,7 @@ extern const char kPcContentVersion[];
 namespace
 {
 bool nativeEnabled = true;
+bool nativeStarted = false;
 bool nativeLoaded = false;
 
 struct Callback
@@ -41,6 +43,10 @@ struct NativeMod
     std::string id;
     std::string directory;
     PcNativeHost host;
+    PcNativeRegister reg;
+    void* dll;
+    bool started;
+    bool failed;
 };
 
 std::vector<NativeMod*> nativeMods;
@@ -493,7 +499,7 @@ std::wstring WidePath(const std::string& path)
     return out;
 }
 
-void LoadMod(const PcMod& m)
+void StartMod(const PcMod& m)
 {
     const std::string path = m.directory + "/" + DLL_NAME;
     PcNativeModRecord rec;
@@ -517,73 +523,118 @@ void LoadMod(const PcMod& m)
     NativeMod* nm = new NativeMod();
     nm->id = m.id;
     nm->directory = m.directory;
+    nm->dll = 0;
+    nm->started = false;
+    nm->failed = false;
     nativeMods.push_back(nm);
     const size_t idx = nativeMods.size() - 1;
     const size_t prev = currentMod;
     currentMod = idx;
 
     HMODULE dll = LoadLibraryExW(WidePath(path).c_str(), 0, DONT_RESOLVE_DLL_REFERENCES);
-    PcNativeModMainFn modMain = 0;
-    bool ok = false;
     if (dll == 0)
         err = "could not be loaded";
-    else if (ResolveImports(dll, &err))
+    else if (!ResolveImports(dll, &err))
+        ;
+    else if (!StartModule(dll))
+        err = "refused to start (its DllMain returned FALSE)";
+    else
     {
-        if (!StartModule(dll))
-            err = "refused to start (its DllMain returned FALSE)";
-        else if ((modMain = reinterpret_cast<PcNativeModMainFn>(GetProcAddress(dll, PC_NATIVE_ENTRY))) == 0)
-            err = "has no " PC_NATIVE_ENTRY;
-        else
+        nm->dll = dll;
+        nm->started = true;
+        PcNativeModRegisterFn reg = (PcNativeModRegisterFn)GetProcAddress(dll, PC_NATIVE_REGISTER);
+        if (reg != 0)
         {
-            PcNativeHost& host = nm->host;
-            memset(&host, 0, sizeof(host));
-            host.abi = PC_NATIVE_ABI;
-            host.size = sizeof(host);
-            host.gameBuild = kPcContentVersion;
-            host.modId = nm->id.c_str();
-            host.modDirectory = nm->directory.c_str();
-            host.dedicatedServer = PcIsDedicatedServer() ? 1 : 0;
-            host.log = Log;
-            host.findSymbol = FindSymbol;
-            host.onFrame = OnFrame;
-            host.onHostStart = OnHostStart;
-            host.onHostTick = OnHostTick;
-            host.onHostStop = OnHostStop;
-            host.onViewFrame = OnViewFrame;
-            host.onViewDone = OnViewDone;
-            host.setPad = SetPad;
-            host.onHud = OnHud;
-            host.drawRect = DrawRect;
-            host.drawText = DrawText;
-            host.textWidth = TextWidth;
-            host.setHideMenus = SetHideMenus;
-            host.sendKey = SendKey;
-            host.sendChar = SendChar;
-            const int rc = modMain(&host);
-            ok = rc == 0;
-            if (!ok)
+            memset(&nm->reg, 0, sizeof(nm->reg));
+            nm->reg.abi = PC_NATIVE_ABI;
+            nm->reg.size = sizeof(nm->reg);
+            nm->reg.gameBuild = kPcContentVersion;
+            nm->reg.modId = nm->id.c_str();
+            nm->reg.modDirectory = nm->directory.c_str();
+            nm->reg.log = Log;
+            PcModHooksFillRegister(&nm->reg);
+            const int rc = reg(&nm->reg);
+            if (rc != 0)
             {
                 char buf[64];
-                snprintf(buf, sizeof(buf), "returned %d from " PC_NATIVE_ENTRY, rc);
+                snprintf(buf, sizeof(buf), "returned %d from " PC_NATIVE_REGISTER, rc);
                 err = buf;
+                nm->failed = true;
             }
+        }
+    }
+    currentMod = prev;
+    if (nm->started && !nm->failed)
+        return;
+    nm->failed = true;
+    printf("[pc] native %s: %s %s; not loaded\n", m.id.c_str(), DLL_NAME, err.c_str());
+    fflush(stdout);
+    if (dll != 0 && !nm->started)
+        FreeLibrary(dll);
+}
+
+void RunMain(size_t idx)
+{
+    NativeMod* nm = nativeMods[idx];
+    if (nm->failed || !nm->started)
+        return;
+    const size_t prev = currentMod;
+    currentMod = idx;
+    std::string err;
+    bool ok = false;
+    PcNativeModMainFn modMain = (PcNativeModMainFn)GetProcAddress((HMODULE)nm->dll, PC_NATIVE_ENTRY);
+    if (modMain == 0)
+        err = "has no " PC_NATIVE_ENTRY;
+    else
+    {
+        PcNativeHost& host = nm->host;
+        memset(&host, 0, sizeof(host));
+        host.abi = PC_NATIVE_ABI;
+        host.size = sizeof(host);
+        host.gameBuild = kPcContentVersion;
+        host.modId = nm->id.c_str();
+        host.modDirectory = nm->directory.c_str();
+        host.dedicatedServer = PcIsDedicatedServer() ? 1 : 0;
+        host.log = Log;
+        host.findSymbol = FindSymbol;
+        host.onFrame = OnFrame;
+        host.onHostStart = OnHostStart;
+        host.onHostTick = OnHostTick;
+        host.onHostStop = OnHostStop;
+        host.onViewFrame = OnViewFrame;
+        host.onViewDone = OnViewDone;
+        host.setPad = SetPad;
+        host.onHud = OnHud;
+        host.drawRect = DrawRect;
+        host.drawText = DrawText;
+        host.textWidth = TextWidth;
+        host.setHideMenus = SetHideMenus;
+        host.sendKey = SendKey;
+        host.sendChar = SendChar;
+        PcModHooksFillHost(&host);
+        const int rc = modMain(&host);
+        ok = rc == 0;
+        if (!ok)
+        {
+            char buf[64];
+            snprintf(buf, sizeof(buf), "returned %d from " PC_NATIVE_ENTRY, rc);
+            err = buf;
         }
     }
     currentMod = prev;
     if (ok)
     {
-        printf("[pc] native %s: %s started\n", m.id.c_str(), DLL_NAME);
+        printf("[pc] native %s: %s started\n", nm->id.c_str(), DLL_NAME);
         fflush(stdout);
         return;
     }
-    printf("[pc] native %s: %s %s; not loaded\n", m.id.c_str(), DLL_NAME, err.c_str());
+    nm->failed = true;
+    printf("[pc] native %s: %s %s; not loaded\n", nm->id.c_str(), DLL_NAME, err.c_str());
     fflush(stdout);
     Drop(&frameCallbacks, idx);
     Drop(&hostStartCallbacks, idx);
     Drop(&hostTickCallbacks, idx);
     Drop(&hostStopCallbacks, idx);
-    if (dll != 0 && modMain == 0)
-        FreeLibrary(dll);
 }
 #endif
 }
@@ -593,11 +644,11 @@ void PcNativeModsSetEnabled(bool on)
     nativeEnabled = on;
 }
 
-void PcNativeModsLoad()
+void PcNativeModsRegister()
 {
-    if (nativeLoaded)
+    if (nativeStarted)
         return;
-    nativeLoaded = true;
+    nativeStarted = true;
     const std::vector<PcMod>& list = PcModsLoaded();
     for (size_t i = 0; i < list.size(); ++i)
     {
@@ -622,12 +673,40 @@ void PcNativeModsLoad()
             printf("[pc] native %s: a client mod; not loaded on a dedicated server\n", m.id.c_str());
             continue;
         }
-        LoadMod(m);
+        StartMod(m);
 #else
         printf("[pc] native %s: native mods need the Windows build; not loaded\n", m.id.c_str());
 #endif
     }
     fflush(stdout);
+}
+
+void PcNativeModsLoad()
+{
+    if (nativeLoaded)
+        return;
+    nativeLoaded = true;
+    PcNativeModsRegister();
+#ifdef _WIN32
+    for (size_t i = 0; i < nativeMods.size(); ++i)
+        RunMain(i);
+#endif
+    fflush(stdout);
+}
+
+const char* PcNativeModsCurrentId()
+{
+    return CurrentId();
+}
+
+size_t PcNativeModsCurrent()
+{
+    return currentMod;
+}
+
+void PcNativeModsSetCurrent(size_t mod)
+{
+    currentMod = mod;
 }
 
 void PcNativeModsFrame()

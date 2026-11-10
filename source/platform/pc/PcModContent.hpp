@@ -19,6 +19,12 @@ void PcModContentRegisterItems();
 void PcModContentAddRecipes(Recipes* recipes);
 void PcModContentAddSmelting(FurnaceRecipes* furnace);
 
+bool PcModContentAddNativeBlock(const std::string& mod, const char* name, const char* displayName, int tab,
+                                void* (*make)(int id));
+bool PcModContentAddNativeItem(const std::string& mod, const char* name, const char* displayName, int tab,
+                               void* (*make)(int id));
+const wchar_t* PcModContentAddNativeTexture(int atlas, const std::string& mod, const char* file);
+
 const wchar_t* PcModContentString(int id);
 
 enum PcModTab

@@ -1,5 +1,8 @@
 #include "game/world/chunk/LevelChunk.hpp"
 #ifdef MINECRAFT_PC
+#include "platform/pc/PcModHooks.hpp"
+#endif
+#ifdef MINECRAFT_PC
 #include "platform/pc/PcModContent.hpp"
 #endif
 #include "game/core/MemSect.hpp"
@@ -2324,6 +2327,9 @@ void LevelChunk::doPostProcess(ChunkSource* source, ChunkGenerator* generator)
         PIXBeginNamedEvent(0.0f, "Main post processing");
         postProcess();
         generator->postProcess(x, z);
+#ifdef MINECRAFT_PC
+        PcModHooksChunkDecorated(level, x, z);
+#endif
         PIXEndNamedEvent();
         markUnsaved();
         mChunkFlags |= TERRAIN_POPULATED_SELF;

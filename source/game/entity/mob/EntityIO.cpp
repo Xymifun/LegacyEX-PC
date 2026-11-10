@@ -1,4 +1,7 @@
 #include "game/entity/mob/EntityIO.hpp"
+#ifdef MINECRAFT_PC
+#include "platform/pc/PcModHooks.hpp"
+#endif
 #include "game/core/StringIds.hpp"
 #include "game/core/EntityType.hpp"
 
@@ -400,6 +403,9 @@ void EntityIO::bootStrap()
     Register(Phantom::create, 112, L"phantom", EntityType::PHANTOM, L"Phantom");
     Register(Villager::create, 120, L"villager", EntityType::VILLAGER, L"Villager");
     Register(EnderCrystal::create, 200, L"ender_crystal", EntityType::ENDER_CRYSTAL, L"EnderCrystal");
+#ifdef MINECRAFT_PC
+    PcModHooksAddEntities();
+#endif
 
     addSpawnInfo(static_cast<int>(IDS_BAT), L"bat", eMinecraftColour_Mob_Bat_Colour1, eMinecraftColour_Mob_Bat_Colour2,
                  eMinecraftIconOverride_NONE);

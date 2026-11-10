@@ -1,4 +1,8 @@
 #include "game/entity/mob/TrackedEntity.hpp"
+#ifdef MINECRAFT_PC
+#include "platform/pc/PcModHooks.hpp"
+#endif
+#include "game/entity/mob/EntityIO.hpp"
 #include "game/core/EntityType.hpp"
 
 #include <cstdlib>
@@ -375,6 +379,15 @@ boost::shared_ptr<Packet> TrackedEntity::getAddEntityPacket()
             return boost::shared_ptr<Packet>(
                 new ClientboundAddEntityPacket(mEntity, 3, ownerId + 1, mYRotp, mXRotp, mXp, mYp, mZp));
         }
+#ifdef MINECRAFT_PC
+        if (PcModHooksIsModType(mEntity->GetType()))
+        {
+            int id = EntityIO::sRegistry.getId(mEntity->GetType());
+            if (id >= 0)
+                return boost::shared_ptr<Packet>(new ClientboundAddEntityPacket(mEntity, PC_MOD_ENTITY_PACKET, id, mYRotp,
+                                                                                mXRotp, mXp, mYp, mZp));
+        }
+#endif
         return boost::shared_ptr<Packet>();
     }
 

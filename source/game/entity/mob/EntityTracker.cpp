@@ -1,4 +1,7 @@
 #include "game/entity/mob/EntityTracker.hpp"
+#ifdef MINECRAFT_PC
+#include "platform/pc/PcModHooks.hpp"
+#endif
 #include "game/core/Boat.hpp"
 #include "game/core/EntityType.hpp"
 
@@ -144,6 +147,10 @@ void EntityTracker::addEntity(boost::shared_ptr<Entity> entity)
     else if (boost::dynamic_pointer_cast<Creature>(entity) != NULL
              || eTYPE_DERIVED_FROM(EntityType::SHULKER, entity->GetType()))
         addEntity(entity, 80, 3, true);
+#ifdef MINECRAFT_PC
+    else if (PcModHooksIsModType(entity->GetType()))
+        addEntity(entity, 80, 3, true);
+#endif
 }
 
 void EntityTracker::removeEntity(boost::shared_ptr<Entity> entity)

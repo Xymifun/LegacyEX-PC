@@ -1,4 +1,10 @@
 #include "game/network/ClientPacketListener.hpp"
+#ifdef MINECRAFT_PC
+#include "platform/pc/PcModHooks.hpp"
+#endif
+#ifdef MINECRAFT_PC
+#include "platform/pc/PcNativeMod.h"
+#endif
 #include "game/core/StringConversion.hpp"
 #include "game/core/StringIds.hpp"
 #include "game/server/MinecraftServer.hpp"
@@ -352,6 +358,14 @@ void ClientPacketListener::handleBlockEntityDataInternal(boost::shared_ptr<Clien
     const int type = packet->getType();
     CompoundTag* tag = packet->getTag();
 
+#ifdef MINECRAFT_PC
+    if (type == PC_NATIVE_BLOCK_ENTITY_PACKET)
+    {
+        if (PcModHooksIsModType(blockEntity->GetType()))
+            blockEntity->load(tag);
+        return;
+    }
+#endif
     if (type == 0xc)
     {
         if (eTYPE_DERIVED_FROM(BlockEntityType::CAULDRON, blockEntity->GetType()))
@@ -996,6 +1010,11 @@ void ClientPacketListener::handleAddEntity(boost::shared_ptr<ClientboundAddEntit
     case ClientboundAddEntityPacket::AREA_EFFECT_CLOUD:
         entity = boost::shared_ptr<Entity>(new AreaEffectCloud(m_level, x, y, z));
         break;
+#ifdef MINECRAFT_PC
+    case PC_MOD_ENTITY_PACKET:
+        entity = EntityIO::newEntity(packet->getData(), m_level);
+        break;
+#endif
     }
 
     if (entity == NULL)
@@ -3086,6 +3105,15 @@ void ClientPacketListener::handleContainerOpen(boost::shared_ptr<ClientboundCont
                 failed = true;
         }
     }
+#ifdef MINECRAFT_PC
+    else if (PcModHooksIsContainer(packet->getType()))
+    {
+        if (PcModHooksOpenContainer(packet->getType(), player.get(), packet->getContainerId(), packet->getSize(),
+                                    packet->getTitle(), packet->getEntityId()))
+            return;
+        failed = true;
+    }
+#endif
     else if (packet->getType() != ClientboundContainerOpenPacket::FIREWORKS)
     {
         if (!packet->isContainer())
@@ -3661,6 +3689,14 @@ void ClientPacketListener::handleItemCooldown(boost::shared_ptr<ClientboundCoold
 
 void ClientPacketListener::handleCustomPayload(boost::shared_ptr<ClientboundCustomPayloadPacket> packet)
 {
+#ifdef MINECRAFT_PC
+    if (packet->getIdentifier() == PC_MOD_MESSAGE_CHANNEL)
+    {
+        arrayWithLength<unsigned char> modData = packet->getData();
+        PcModHooksMessage(0, modData.data, (int)modData.length);
+        return;
+    }
+#endif
     ByteArrayInputStream byteStream(packet->getData());
     DataInputStream input(&byteStream);
     if (packet->getIdentifier() == L"MC|TrList")

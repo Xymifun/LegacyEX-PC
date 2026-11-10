@@ -1242,8 +1242,20 @@ void Renderer::Initialise()
         PcGl::Uniform1i(PcGl::GetUniformLocation(s_cursorProgram, "uImage"), 0);
         PcGl::GenTextures(1, &s_cursorTexture);
         PcGl::BindTexture(GL_TEXTURE_2D, s_cursorTexture);
+        std::vector<unsigned int> cursor(kPcCursorImage, kPcCursorImage + kPcCursorImageSize * kPcCursorImageSize);
+        FILE* cursorFile = fopen((PcContentRoot() + "/PC/Cursor.rgba").c_str(), "rb");
+        if (cursorFile != 0)
+        {
+            std::vector<unsigned int> loaded(cursor.size());
+            if (fread(&loaded[0], 4, loaded.size(), cursorFile) == loaded.size())
+            {
+                cursor = loaded;
+                printf("[pc] cursor: using PC/Cursor.rgba\n");
+            }
+            fclose(cursorFile);
+        }
         PcGl::TexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, kPcCursorImageSize, kPcCursorImageSize, 0, GL_RGBA,
-                         GL_UNSIGNED_BYTE, kPcCursorImage);
+                         GL_UNSIGNED_BYTE, &cursor[0]);
         PcGl::TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
         PcGl::TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         PcGl::TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);

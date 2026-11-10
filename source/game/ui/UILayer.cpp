@@ -1,4 +1,7 @@
 #include "game/ui/UILayer.hpp"
+#ifdef MINECRAFT_PC
+#include "platform/pc/PcModHooks.hpp"
+#endif
 
 #include <algorithm>
 
@@ -362,6 +365,16 @@ bool UILayer::updateFocusState(bool requestFocus)
             m_ignoreAutosaveMenuDisplayed = true;
             break;
         default:
+#ifdef MINECRAFT_PC
+        {
+            bool container = false;
+            if (PcModHooksIsScreen(sceneType, &container) && container)
+            {
+                m_containerMenuDisplayed = true;
+                m_ignoreAutosaveMenuDisplayed = true;
+            }
+        }
+#endif
             break;
         }
 
@@ -613,6 +626,13 @@ bool UILayer::NavigateToScene(int player, EUIScene scene, void* data)
         created = new UIScene_AchievementsMenu(player, data, this);
         break;
     default:
+#ifdef MINECRAFT_PC
+        if (PcModHooksIsScreen((int)scene, 0))
+        {
+            created = PcModHooksMakeScreen((int)scene, player, data, this);
+            break;
+        }
+#endif
         return false;
     }
 

@@ -1,6 +1,7 @@
 #include "platform/pc/PcModContent.hpp"
 
 #include "platform/pc/PcMods.hpp"
+#include "platform/pc/PcNativeMods.hpp"
 #include "platform/pc/PcScriptsInternal.hpp"
 
 #include <stdio.h>
@@ -75,6 +76,7 @@ struct BlockDef
     PcModTab tab;
     int id;
     Block* block;
+    void* (*make)(int id);
 };
 
 struct ItemDef
@@ -92,6 +94,7 @@ struct ItemDef
     float saturation;
     bool meat;
     Item* item;
+    void* (*make)(int id);
 };
 
 struct RecipeDef
@@ -127,7 +130,7 @@ std::vector<ItemDef> modItems;
 std::vector<RecipeDef> modRecipes;
 std::vector<SmeltDef> modSmelts;
 std::deque<std::wstring> modStrings;
-std::vector<AtlasEntry> atlasEntries[2];
+std::deque<AtlasEntry> atlasEntries[2];
 
 std::wstring Widen(const std::string& s)
 {
@@ -462,6 +465,7 @@ int ContentBlock(lua_State* L)
     def.tab = tab != 0 ? TabByName(tab) : ePcModTab_Building;
     def.id = 0;
     def.block = 0;
+    def.make = 0;
     modBlocks.push_back(def);
     return 0;
 }
@@ -523,6 +527,7 @@ int ContentItem(lua_State* L)
     def.saturation = (float)saturation;
     def.meat = meat;
     def.item = 0;
+    def.make = 0;
     modItems.push_back(def);
     return 0;
 }
@@ -1003,8 +1008,67 @@ std::map<std::string, int> RuntimeIds()
 }
 }
 
+bool PcModContentAddNativeBlock(const std::string& mod, const char* name, const char* displayName, int tab,
+                                void* (*make)(int id))
+{
+    if (name == 0 || !ValidPath(name, true) || make == 0 || Declared(mod + ":" + name))
+        return false;
+    BlockDef def;
+    def.mod = mod;
+    def.path = name;
+    def.key = mod + ":" + name;
+    def.nameId = AddString(displayName != 0 ? displayName : name);
+    def.descriptionId = AddString("");
+    def.textures[0] = def.textures[1] = def.textures[2] = 0;
+    def.hardness = 0.0f;
+    def.resistance = -1.0f;
+    def.light = 0;
+    def.dropsNothing = false;
+    def.hasDrop = false;
+    def.dropMin = def.dropMax = 1;
+    def.tab = tab >= 0 && tab <= (int)ePcModTab_Misc ? (PcModTab)tab : ePcModTab_None;
+    def.id = 0;
+    def.block = 0;
+    def.make = make;
+    modBlocks.push_back(def);
+    return true;
+}
+
+bool PcModContentAddNativeItem(const std::string& mod, const char* name, const char* displayName, int tab,
+                               void* (*make)(int id))
+{
+    if (name == 0 || !ValidPath(name, true) || make == 0 || Declared(mod + ":" + name))
+        return false;
+    ItemDef def;
+    def.mod = mod;
+    def.path = name;
+    def.key = mod + ":" + name;
+    def.nameId = AddString(displayName != 0 ? displayName : name);
+    def.descriptionId = AddString("");
+    def.texture = 0;
+    def.stack = 64;
+    def.tab = tab >= 0 && tab <= (int)ePcModTab_Misc ? (PcModTab)tab : ePcModTab_None;
+    def.food = false;
+    def.hunger = 0;
+    def.saturation = 0.0f;
+    def.meat = false;
+    def.item = 0;
+    def.make = make;
+    modItems.push_back(def);
+    return true;
+}
+
+const wchar_t* PcModContentAddNativeTexture(int atlas, const std::string& mod, const char* file)
+{
+    if (file == 0 || !ValidPath(file, true))
+        return 0;
+    int n = AddTexture(atlas == 0 ? 0 : 1, mod, file);
+    return atlasEntries[atlas == 0 ? 0 : 1][n].sprite.c_str();
+}
+
 void PcModContentRegisterBlocks()
 {
+    PcNativeModsRegister();
     LoadDefinitions();
     AssignBlockIds();
     for (size_t i = 0; i < modBlocks.size(); ++i)
@@ -1012,6 +1076,19 @@ void PcModContentRegisterBlocks()
         BlockDef& def = modBlocks[i];
         if (def.id == 0)
             continue;
+        if (def.make != 0)
+        {
+            Block* nb = (Block*)def.make(def.id);
+            if (nb == 0)
+            {
+                printf("[pc] content: %s: the mod made no block\n", def.key.c_str());
+                continue;
+            }
+            nb->setNameAndDescriptionId(def.nameId, def.descriptionId);
+            Block::registerBlock(def.id, ResourceLocation(Widen(def.mod), Widen(def.path)), nb);
+            def.block = nb;
+            continue;
+        }
         PcModBlock* b = new PcModBlock(MaterialByName(def.material), i);
         b->setDestroyTime(def.hardness);
         if (def.resistance >= 0.0f)
@@ -1062,10 +1139,23 @@ void PcModContentRegisterItems()
             printf("[pc] content: no item id left for %s\n", def.key.c_str());
             continue;
         }
-        Item* item = def.food ? static_cast<Item*>(new FoodItem(def.hunger, def.saturation, def.meat))
-                              : static_cast<Item*>(new PcModItem());
-        item->setIconName(atlasEntries[1][def.texture].sprite);
-        item->setMaxStackSize(def.stack);
+        Item* item = 0;
+        if (def.make != 0)
+        {
+            item = (Item*)def.make(FIRST_ITEM_ID + slot);
+            if (item == 0)
+            {
+                printf("[pc] content: %s: the mod made no item\n", def.key.c_str());
+                continue;
+            }
+        }
+        else
+        {
+            item = def.food ? static_cast<Item*>(new FoodItem(def.hunger, def.saturation, def.meat))
+                            : static_cast<Item*>(new PcModItem());
+            item->setIconName(atlasEntries[1][def.texture].sprite);
+            item->setMaxStackSize(def.stack);
+        }
         item->setDescriptionId(def.nameId, def.descriptionId);
         Item::registerItem(FIRST_ITEM_ID + slot, ResourceLocation(Widen(def.mod), Widen(def.path)), item);
         def.item = item;
@@ -1191,7 +1281,7 @@ void PcModContentCreativeItems(std::vector<PcModCreativeEntry>* out)
 std::vector<std::wstring> PcModContentAtlasSprites(int type)
 {
     std::vector<std::wstring> out;
-    const std::vector<AtlasEntry>& atlas = atlasEntries[type == 0 ? 0 : 1];
+    const std::deque<AtlasEntry>& atlas = atlasEntries[type == 0 ? 0 : 1];
     for (size_t i = 0; i < atlas.size(); ++i)
         out.push_back(atlas[i].sprite);
     return out;
@@ -1199,7 +1289,7 @@ std::vector<std::wstring> PcModContentAtlasSprites(int type)
 
 void PcModContentPatchAtlas(int type, BufferedImage* image)
 {
-    const std::vector<AtlasEntry>& atlas = atlasEntries[type == 0 ? 0 : 1];
+    const std::deque<AtlasEntry>& atlas = atlasEntries[type == 0 ? 0 : 1];
     if (image == 0 || atlas.empty())
         return;
     const int baseRows = BASE_ROWS[type == 0 ? 0 : 1];

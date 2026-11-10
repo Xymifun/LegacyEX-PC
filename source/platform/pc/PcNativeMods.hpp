@@ -1,10 +1,15 @@
 #ifndef PLATFORM_PC_PCNATIVEMODS_HPP
 #define PLATFORM_PC_PCNATIVEMODS_HPP
 
+#include <stddef.h>
 #include <vector>
 
 void PcNativeModsSetEnabled(bool enabled);
+void PcNativeModsRegister();
 void PcNativeModsLoad();
+const char* PcNativeModsCurrentId();
+size_t PcNativeModsCurrent();
+void PcNativeModsSetCurrent(size_t mod);
 
 void PcNativeModsFrame();
 void PcNativeModsHostStart();

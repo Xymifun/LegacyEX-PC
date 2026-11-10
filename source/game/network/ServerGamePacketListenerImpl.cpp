@@ -1,4 +1,7 @@
 #include "game/network/ServerGamePacketListenerImpl.hpp"
+#ifdef MINECRAFT_PC
+#include "platform/pc/PcModHooks.hpp"
+#endif
 #include "game/data/CompoundTag.hpp"
 #include "game/core/NbtIo.hpp"
 #include "game/core/EntityType.hpp"
@@ -1409,6 +1412,12 @@ void ServerGamePacketListenerImpl::handleCustomPayload(boost::shared_ptr<Serverb
         printf("[pc] server: ignored %ls data from %ls: %u bytes is over the 32,767-byte limit\n", identifier.c_str(),
                mPlayer->getName().c_str(), packet->PcOversizedBytes());
         fflush(stdout);
+        return;
+    }
+    if (identifier == PC_MOD_MESSAGE_CHANNEL)
+    {
+        arrayWithLength<unsigned char> modData = packet->getData();
+        PcModHooksMessage(mPlayer.get(), modData.data, (int)modData.length);
         return;
     }
 #endif

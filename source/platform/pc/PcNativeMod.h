@@ -184,6 +184,79 @@ typedef struct PcNativePad
     int pointerPress;       /* 1 while pressed, as the left mouse button */
 } PcNativePad;
 
+/* --- new content: PcNativeModRegister, while the game starts (README, Native mods) --- */
+
+#define PC_NATIVE_REGISTER "PcNativeModRegister"
+
+/* creative menu tabs for addBlock and addItem */
+enum
+{
+    PC_NATIVE_TAB_NONE,
+    PC_NATIVE_TAB_BUILDING,
+    PC_NATIVE_TAB_DECORATION,
+    PC_NATIVE_TAB_REDSTONE,
+    PC_NATIVE_TAB_TRANSPORT,
+    PC_NATIVE_TAB_MATERIALS,
+    PC_NATIVE_TAB_FOOD,
+    PC_NATIVE_TAB_TOOLS,
+    PC_NATIVE_TAB_BREWING,
+    PC_NATIVE_TAB_MISC
+};
+
+/* atlases for addTexture */
+enum
+{
+    PC_NATIVE_ATLAS_BLOCKS = 0,
+    PC_NATIVE_ATLAS_ITEMS = 1
+};
+
+/* the type a mod block entity puts in its ClientboundBlockEntityDataPacket (getUpdatePacket): players' games
+   then give the packet's tag to that block entity's load() */
+#define PC_NATIVE_BLOCK_ENTITY_PACKET 127
+
+/* these return a new object of the game's class, as void* so this file stays plain C */
+typedef void* (*PcNativeMakeBlock)(int id);        /* a Block (its constructor must call DerivedInit()) */
+typedef void* (*PcNativeMakeItem)(int id);         /* an Item */
+typedef void* (*PcNativeMakeBlockEntity)(void);    /* a BlockEntity */
+typedef void* (*PcNativeMakeEntity)(void* level);  /* an Entity, for that Level */
+typedef void* (*PcNativeMakeRenderer)(void* dispatcher);  /* an EntityRenderer, for the EntityRenderDispatcher */
+
+/* What the game gives PcNativeModRegister. Names are the mod's own ("copper_lamp"); the game puts the mod's id
+   in front ("mymod:copper_lamp"). Blocks and items get ids like content.lua's do, and worlds keep them the same
+   way. Entities and block entities are saved by name, so a world can lose a mod and keep loading. */
+typedef struct PcNativeRegister
+{
+    unsigned int abi;
+    unsigned int size;
+    const char* gameBuild;
+    const char* modId;
+    const char* modDirectory;
+    void (*log)(const char* text);
+
+    void (*addBlock)(const char* name, const char* displayName, int tab, PcNativeMakeBlock make);
+    void (*addItem)(const char* name, const char* displayName, int tab, PcNativeMakeItem make);
+    /* the mod's textures/FILE.png in an atlas; returns the sprite name for IconRegister::registerIcon */
+    const wchar_t* (*addTexture)(int atlas, const char* file);
+    /* family is a type of the game's (BlockEntityType::CONTAINER, EntityType::MONSTER...): the game's "is it a ..."
+       checks see the new type as one of those. Returns the new type, which the class's GetType() must return. */
+    unsigned long long (*addBlockEntity)(const char* name, unsigned long long family, PcNativeMakeBlockEntity make);
+    unsigned long long (*addEntity)(const char* name, unsigned long long family, PcNativeMakeEntity make);
+    void (*addEntityRenderer)(unsigned long long type, PcNativeMakeRenderer make);
+} PcNativeRegister;
+
+/* optional, as well as PcNativeModMain: 0 when it registered; anything else and the mod is not loaded */
+typedef int (*PcNativeModRegisterFn)(const PcNativeRegister* reg);
+
+/* --- runtime hooks (PcNativeHost) --- */
+
+typedef void* (*PcNativeMakeScreen)(int pad, void* data, void* layer);  /* a UIScene, for that UILayer */
+/* player's game: the server opened a container of this type for player (a MultiplayerLocalPlayer); make the menu
+   (player->mContainerMenu, with m_containerId) and show the screen. Return 1 if it did. */
+typedef int (*PcNativeOpenContainer)(void* player, int containerId, int size, const wchar_t* title, int entityId,
+                                     void* user);
+typedef void (*PcNativeChunkCallback)(void* level, int chunkX, int chunkZ, int dimension, void* user);
+typedef void (*PcNativeMessageCallback)(void* player, const char* channel, const void* data, int size, void* user);
+
 /* What the game gives PcNativeModMain. Fields are only ever added at the end; size says how many. */
 typedef struct PcNativeHost
 {
@@ -229,6 +302,21 @@ typedef struct PcNativeHost
      * a typed character, as the keyboard gives them to the game */
     void (*sendKey)(int key, int down);
     void (*sendChar)(unsigned int character);
+
+    /* main thread: a screen of the mod's own. Returns its id, for gConsoleUIController.NavigateToScene(pad,
+       (EUIScene)id, data, ...). container 1: it counts as a container menu (as a chest's does). */
+    int (*addScreen)(PcNativeMakeScreen make, int container);
+    /* a container type of the mod's own: the number (100 to 199) its InteractionObject::getTypeId returns on the
+       host. The same name gives the same number on every game. */
+    int (*addContainerType)(const char* name, PcNativeOpenContainer open, void* user);
+    /* host: a new chunk was just decorated (ores, trees, structures); place the mod's own things in it. Runs on
+       the thread that made the chunk. */
+    void (*onChunkDecorated)(PcNativeChunkCallback callback, void* user);
+    /* messages between the mod on the host and on the players' games: channel up to 32 characters, data up to
+       30000 bytes. onMessage gets the sending ServerPlayer on the host, and 0 on a player's game. */
+    void (*sendToHost)(const char* channel, const void* data, int size);
+    void (*sendToPlayer)(void* serverPlayer, const char* channel, const void* data, int size);  /* 0: everyone */
+    void (*onMessage)(PcNativeMessageCallback callback, void* user);
 } PcNativeHost;
 
 /* The mod's entry point: 0 when it started; anything else and the game unloads it. */
