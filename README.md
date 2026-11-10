@@ -74,7 +74,7 @@ Render Scale can also be lowered (this barely does anything)
 
 World Sizes can be changed from Classic up to Large
 
-Split-screen works (although used as placeholder guest players; there's no coherent alternative I can think of)
+Split-screen works
 
 Added LCEOnline support (later added Online Multiplayer features, but it should still work here)
 
