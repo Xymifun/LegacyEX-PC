@@ -204,7 +204,7 @@ All worlds in mclegacy.space are public by default unless if you toggle the "Fri
 
 Checking Public Minigames shows an "(X Available)" label next to them so you don't blindly guess
 
-## Note
+# Note
 
 Keep in mind this is barebones for developers who want a proper look at the source code (to check up on what's under the hood and how reliable the code is).
 
