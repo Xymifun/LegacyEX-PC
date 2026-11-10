@@ -30,7 +30,14 @@ int aaDistance(int x, int z, const ChunkPos* pos)
     return std::max(std::abs(x - pos->x), std::abs(z - pos->z));
 }
 
+#ifdef MINECRAFT_PC
+ChunkPos TheEndDimension::AREAS[9] = {ChunkPos(0, 0),   ChunkPos(0, 25),  ChunkPos(25, 0),
+                                      ChunkPos(0, -25), ChunkPos(-25, 0), ChunkPos(32, 32),
+                                      ChunkPos(-32, 32), ChunkPos(32, -32), ChunkPos(-32, -32)};
+int TheEndDimension::areaCount = 2;
+#else
 ChunkPos TheEndDimension::AREAS[2] = {ChunkPos(0, 0), ChunkPos(0, 25)};
+#endif
 
 TheEndDimension::TheEndDimension() : Dimension(), mDragonFight(NULL), mModernEnd(true)
 {
@@ -58,6 +65,15 @@ int TheEndDimension::getXZSize()
 void TheEndDimension::init()
 {
     mBiomeSource = new FixedBiomeSource(Biome::THE_END, 0.5f);
+#ifdef MINECRAFT_PC
+    int worldSize = mLevel->getLevelData()->getXZSize();
+    if (worldSize >= 640)
+        areaCount = 9;
+    else if (worldSize >= 320)
+        areaCount = 5;
+    else
+        areaCount = 2;
+#endif
     CompoundTag* data = mLevel->getLevelData()->getDimensionData(DimensionType::THE_END);
     mModernEnd = mLevel->getLevelData()->getModernEnd();
     mDragonFight = !mLevel->mIsClientSide
@@ -158,9 +174,21 @@ ChunkPos* TheEndDimension::closestAreaToPoint(int x, int z)
 {
     ChunkPos* closest = &AREAS[0];
     unsigned int closestDistance = aaDistance(x, z, &AREAS[0]);
+#ifdef MINECRAFT_PC
+    for (int i = 1; i < areaCount; i++)
+    {
+        unsigned int d = (unsigned int)aaDistance(x, z, &AREAS[i]);
+        if (d < closestDistance)
+        {
+            closest = &AREAS[i];
+            closestDistance = d;
+        }
+    }
+#else
     ChunkPos* area = &AREAS[1];
     if (static_cast<unsigned int>(aaDistance(x, z, area)) < closestDistance)
         closest = area;
+#endif
     return closest;
 }
 

@@ -439,6 +439,10 @@ bool ParseArguments(int argc, char** argv, LaunchOptions* opts)
         }
         else if (strcmp(argv[i], "--accept-eula") == 0)
             PcAcceptEula();
+        else if (strcmp(argv[i], "--reset-nether") == 0)
+            PcRequestResetNether();
+        else if (strcmp(argv[i], "--reset-end") == 0)
+            PcRequestResetEnd();
         else if (strcmp(argv[i], "--hidden") == 0)
             PcSetDisplayMode(ePcDisplay_Hidden);
         else if (strcmp(argv[i], "--no-lan") == 0)

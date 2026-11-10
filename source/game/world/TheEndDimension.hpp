@@ -34,7 +34,12 @@ public:
     virtual void saveData();
     virtual void tick();
     static ChunkPos* closestAreaToPoint(int x, int z);
+#ifdef MINECRAFT_PC
+    static ChunkPos AREAS[9];
+    static int areaCount;
+#else
     static ChunkPos AREAS[2];
+#endif
     virtual AABB* getPlayerConstraints(const BlockPos& pos);
     virtual bool containsChunk(int x, int z);
     virtual int getBlockLightColour();

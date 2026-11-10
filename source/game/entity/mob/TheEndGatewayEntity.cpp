@@ -138,7 +138,12 @@ void TheEndGatewayEntity::findExitPortal()
     ChunkPos chunkPos(0, 0);
     for (unsigned int attempt = 0; mExitPortal == NULL && attempt < 1000; ++attempt)
     {
+#ifdef MINECRAFT_PC
+        chunkPos = portalNumber + 1 < TheEndDimension::areaCount ? TheEndDimension::AREAS[portalNumber + 1]
+                                                                  : TheEndDimension::AREAS[1];
+#else
         chunkPos = TheEndDimension::AREAS[portalNumber + 1];
+#endif
         int xOffset = random.nextInt(2) + 3;
         if (!random.nextBoolean())
             xOffset = -xOffset;

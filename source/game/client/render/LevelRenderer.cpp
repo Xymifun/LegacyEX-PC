@@ -112,7 +112,7 @@ float gCloudDriftAccum = 0.0f;
 bool gCloudDriftLatched = false;
 
 #ifdef MINECRAFT_PC
-int gChunkDimensionBases[4] = {0, 0x640000, 0x659000, 0x65AD40};
+int gChunkDimensionBases[4] = {0, 0x640000, 0x659000, 0x65EC40};
 #else
 int gChunkDimensionBases[4] = {0, 0x19000, 0x1a900, 0x1c640};
 #endif
@@ -156,6 +156,16 @@ int getChunkIndex(int dimension, int x, int y, int z)
     {
         return gChunkDimensionBases[2] + outerX * 0xc0 + outerZ * 16 + y + 0x1440;
     }
+
+#ifdef MINECRAFT_PC
+    for (int i = 2; i < TheEndDimension::areaCount; i++)
+    {
+        unsigned int ax = (x + 6) - TheEndDimension::AREAS[i].x;
+        unsigned int az = (z + 6) - TheEndDimension::AREAS[i].z;
+        if (ax < 12 && (unsigned int)y < 16 && az < 12)
+            return gChunkDimensionBases[2] + 0x1440 + (i - 1) * 0x900 + ax * 0xc0 + az * 16 + y;
+    }
+#endif
 
     return -1;
 }

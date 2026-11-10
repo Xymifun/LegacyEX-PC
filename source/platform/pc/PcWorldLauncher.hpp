@@ -11,6 +11,8 @@ void PcRequestWorldCreative();
 void PcRequestWorldVisibility(int visibility);
 bool PcRequestWorldSize(const std::string& size);
 void PcRequestWorldRoam(int blocks);
+void PcRequestResetNether();
+void PcRequestResetEnd();
 void PcAcceptEula();
 void PcRequestHost();
 void PcRequestJoin(const std::string& hostName);

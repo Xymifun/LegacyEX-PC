@@ -71,12 +71,14 @@ std::wstring StrongholdFeature::getFeatureName()
 #ifdef MINECRAFT_PC
 bool StrongholdFeature::GenerateRingPositions()
 {
-    const int massiveWidth = 640;
+    const int largeWidth = 320;
     const int ringCounts[] = {3, 6, 9};
     const int ringNearest[] = {40, 120, 220};
     const int ringFarthest[] = {72, 170, 270};
-    if (mVariant != 3 || level->getLevelData()->getXZSize() < massiveWidth)
+    const int worldSize = level->getLevelData()->getXZSize();
+    if (mVariant != 3 || worldSize < largeWidth)
         return false;
+    const int edge = worldSize / 2 - 20;
 
     for (std::vector<ChunkPos*>::iterator it = mPositions.begin(); it != mPositions.end(); ++it)
         delete *it;
@@ -84,13 +86,14 @@ bool StrongholdFeature::GenerateRingPositions()
 
     Random positionRandom;
     positionRandom.setSeed(level->getSeed());
-    for (int ring = 0; ring < 3; ++ring)
+    for (int ring = 0; ring < 3 && ringNearest[ring] < edge; ++ring)
     {
+        const int farthest = ringFarthest[ring] < edge ? ringFarthest[ring] : edge;
         double angle = positionRandom.nextDouble() * 3.1415927f * 2.0;
         for (int index = 0; index < ringCounts[ring]; ++index)
         {
             const double distance = ringNearest[ring]
-                                    + positionRandom.nextDouble() * (ringFarthest[ring] - ringNearest[ring]);
+                                    + positionRandom.nextDouble() * (farthest - ringNearest[ring]);
             int x = Math::round(std::cos(angle) * distance);
             int z = Math::round(std::sin(angle) * distance);
             BlockPos* biomePosition = level->getBiomeSource()->findBiome(x * 16 + 8, z * 16 + 8, 112, mAllowedBiomes,

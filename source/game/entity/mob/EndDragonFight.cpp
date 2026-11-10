@@ -1,4 +1,7 @@
 #include "game/entity/mob/EndDragonFight.hpp"
+#ifdef MINECRAFT_PC
+#include "game/world/TheEndDimension.hpp"
+#endif
 #include "game/core/StringIds.hpp"
 #include "game/world/LevelEvent.hpp"
 
@@ -89,11 +92,24 @@ EndDragonFight::EndDragonFight(ServerLevel* levelValue, CompoundTag* data)
         ListTag* list = data->getList(L"Gateways", Tag::TAG_INT);
         for (int i = 0; i < list->size(); ++i)
             gateways.push_back(list->getInt(i));
+#ifdef MINECRAFT_PC
+        int had = data->contains(L"PcGatewayCount") ? data->getInt(L"PcGatewayCount") : 1;
+        for (int i = had; i < TheEndDimension::areaCount - 1; i++)
+        {
+            if (std::find(gateways.begin(), gateways.end(), i) == gateways.end())
+                gateways.push_back(i);
+        }
+#endif
     }
     else
     {
+#ifdef MINECRAFT_PC
+        for (int i = 0; i < TheEndDimension::areaCount - 1; ++i)
+            gateways.push_back(i);
+#else
         for (int i = 0; i < 1; ++i)
             gateways.push_back(i);
+#endif
         Random random(levelValue->getSeed());
         Mth::shuffle(&gateways, random);
     }
@@ -281,13 +297,20 @@ CompoundTag* EndDragonFight::saveData()
     for (std::vector<int>::iterator gateway = gateways.begin(); gateway != gateways.end(); ++gateway)
         list->add(new IntTag(*gateway));
     data->put(L"Gateways", list);
+#ifdef MINECRAFT_PC
+    data->putInt(L"PcGatewayCount", TheEndDimension::areaCount - 1);
+#endif
     return data;
 }
 
 BlockPos EndDragonFight::getGatewayPosition(int index)
 {
     const float PI = 3.1415927f;
+#ifdef MINECRAFT_PC
+    const float angle = 2.0f * (-3.1415927f + 0.15707963f * (float)index);
+#else
     const float angle = 2.0f * (3.1415927f * static_cast<float>(index) + -3.1415927f);
+#endif
     const float cosine = std::cos(angle);
     const float radius = 65.0f;
     const int x = static_cast<int>(radius * cosine);

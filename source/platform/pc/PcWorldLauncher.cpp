@@ -85,7 +85,7 @@ struct WorldRequest
 {
     WorldRequest()
         : hasSeed(false), seed(0), worldSize(1), roamStep(0), host(false), join(false), joinSessionId(0), joinAddress(0), joinPort(0),
-          quitOnDisconnect(false), interactive(false)
+          quitOnDisconnect(false), interactive(false), resetNether(false), resetEnd(false)
     {
     }
     std::wstring name;
@@ -103,6 +103,8 @@ struct WorldRequest
     unsigned short joinPort;
     bool quitOnDisconnect;
     bool interactive;
+    bool resetNether;
+    bool resetEnd;
 };
 
 WorldRequest g_request;
@@ -277,8 +279,12 @@ void HostSavedWorld(Minecraft* mc)
     initData->m_saveData = 0;
     initData->m_gameType = gameType;
     mc->mTexturePackRepository->selectTexturePackById(initData->m_texturePackId, false);
-    gApp.SetResetNether(false);
-    gApp.SetResetEnd(false);
+    gApp.SetResetNether(g_request.resetNether);
+    gApp.SetResetEnd(g_request.resetEnd);
+    if (g_request.resetNether)
+        printf("[pc] world: resetting the Nether\n");
+    if (g_request.resetEnd)
+        printf("[pc] world: resetting the End\n");
 
     if (g_request.visibility != 0)
         gApp.SetGameHostOption(eGameHostOption_FriendsOfFriends, g_request.visibility == 2 ? 1 : 0);
@@ -553,6 +559,16 @@ void PcRequestWorldSeed(long long seed)
 {
     g_request.hasSeed = true;
     g_request.seed = seed;
+}
+
+void PcRequestResetNether()
+{
+    g_request.resetNether = true;
+}
+
+void PcRequestResetEnd()
+{
+    g_request.resetEnd = true;
 }
 
 void PcRequestWorldRoam(int n)

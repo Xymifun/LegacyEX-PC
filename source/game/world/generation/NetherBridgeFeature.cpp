@@ -51,10 +51,10 @@ std::vector<Biome::MobSpawnerData*>* NetherBridgeFeature::getBridgeEnemies()
 #ifdef MINECRAFT_PC
 void NetherBridgeFeature::PlaceGridFortresses()
 {
-    const int massiveWidth = 640;
+    const int largeWidth = 320;
     const int cellChunks = 20;
     LevelData* levelData = level->getLevelData();
-    if (levelData->getXZSize() < massiveWidth || levelData->getHellScale() <= 0)
+    if (levelData->getXZSize() < largeWidth || levelData->getHellScale() <= 0)
         return;
     const int half = levelData->getXZSize() / levelData->getHellScale() / 2;
     const int cells = half * 2 / cellChunks;
