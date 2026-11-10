@@ -1,6 +1,6 @@
 # MinecraftLegacyEX-PC-source
 
-Source code of the PC version for LegacyEX. Keep in mind this build is barebones and mostly for developers to look at closer
+Source code of the PC version for LegacyEX, which is a TU74 PC Port of Minecraft Legacy Edition by 4J Studios. Keep in mind this build is barebones and mostly for developers to look at closer
 To keep this legal, no game files are included and you need your Wii U Edition files to access this open-source version of the game
 
 ## What you need on Windows
