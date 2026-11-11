@@ -1,12 +1,12 @@
 #ifndef PLATFORM_PC_PCNATIVEMOD_H
 #define PLATFORM_PC_PCNATIVEMOD_H
 
-/* Native mods (tools/pc/README.md, Native mods): a mod's native/win64.dll (or native/win32.dll for the
- * 32-bit build) is C++ built against this game's sources, with this game's compiler and flags
- * (pc_add_native_mod in tools/pc/CMakeLists.txt). The game reads the record below from the DLL's file
- * before it loads it. It runs on the build it was made for, and on other builds only when every game
- * header it was compiled against is unchanged there (the .pcabi section pc_add_native_mod adds); any
- * other DLL is refused.
+/* Native mods: a mod's native/win64.dll (or native/win32.dll for the 32-bit build) is C++ built
+ * against this game's sources, with this game's compiler and flags (pc_add_native_mod in
+ * tools/pc/CMakeLists.txt; tools/pc/native-example/ExampleMod.cpp is a working mod that uses all of
+ * this header). The game reads the record below from the DLL's file before it loads it. It runs on
+ * the build it was made for, and on other builds only when every game header it was compiled against
+ * is unchanged there (the .pcabi section pc_add_native_mod adds); any other DLL is refused.
  *
  * A mod calls the game directly: it includes the game's headers and links libpcgame.a, an import
  * library for every function and variable of the game, as if the game were a DLL named pcgame.dll. The
@@ -185,7 +185,7 @@ typedef struct PcNativePad
     int pointerPress;       /* 1 while pressed, as the left mouse button */
 } PcNativePad;
 
-/* --- new content: PcNativeModRegister, while the game starts (README, Native mods) --- */
+/* --- new content: PcNativeModRegister, while the game starts --- */
 
 #define PC_NATIVE_REGISTER "PcNativeModRegister"
 
@@ -260,7 +260,7 @@ typedef struct PcNativeRegister
     unsigned long long (*addEntity)(const char* name, unsigned long long family, PcNativeMakeEntity make);
     void (*addEntityRenderer)(unsigned long long type, PcNativeMakeRenderer make);
 
-    /* Replaces a game function with the mod's own (README, Function hooks), for every caller, virtual calls
+    /* Replaces a game function with the mod's own, for every caller, virtual calls
        included. name is the function as `llvm-nm -C` prints it: "Zombie::doHurtTarget" when only one function
        has that name, else the full signature "Zombie::doHurtTarget(boost::shared_ptr<Entity>)"; a mangled
        name works too. replacement is a plain function with the same return type and arguments, and for a
@@ -294,7 +294,7 @@ typedef struct PcNativeRegister
        button; 0 leaves it unbound. Returns the key for PcNativeHost's keyDown and keyPressed, or 0. */
     int (*addKey)(const char* name, const char* label, int defaultKey);
 
-    /* A structure spread over chunks, as villages and temples are (README, Structures): a StructureFeature
+    /* A structure spread over chunks, as villages and temples are: a StructureFeature
        subclass. Every world generator of those dimensions (PC_NATIVE_*; normal worlds, not flat ones) makes
        one with make, and runs it as its own structures when "Generate Structures" is on: isFeatureChunk picks
        the chunks that start one, createStructureStart lays out its pieces (kept in the world's saved data
@@ -308,7 +308,7 @@ typedef struct PcNativeRegister
     unsigned int (*addStructureStart)(const char* name, PcNativeMakeStructureStart make);
     unsigned int (*addStructurePiece)(const char* name, PcNativeMakeStructurePiece make);
 
-    /* A sound of the mod's own (README, Sounds): a SoundEvent named "modid:name" that plays the mod's
+    /* A sound of the mod's own: a SoundEvent named "modid:name" that plays the mod's
        sounds/FILE instead of one of the game's. files is one file or several split by ';' ("step1.ogg;
        step2.ogg"), one picked at random each time: .wav (PCM or ADPCM), .ogg (Vorbis) or .mp3, mono or
        stereo, up to 16 MB each (an ogg or mp3 up to about 3 minutes, kept decoded). range is how far

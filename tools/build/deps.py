@@ -14,6 +14,7 @@ import os
 import shutil
 import sys
 import tarfile
+import time
 import urllib.request
 import zipfile
 
@@ -35,16 +36,26 @@ def tree_hash(files):
     return digest.hexdigest()
 
 
+TRIES = 4
+
+
 def download(url, cache):
     os.makedirs(cache, exist_ok=True)
     path = os.path.join(cache, url.rstrip("/").split("/")[-1])
     if not os.path.isfile(path):
         request = urllib.request.Request(url, headers={"User-Agent": "mcwiiu-reconstructed-build"})
-        try:
-            with urllib.request.urlopen(request, timeout=600) as response:
-                data = response.read()
-        except OSError as error:
-            raise DependencyError("could not download %s: %s" % (url, error))
+        # some hosts (lua.org) drop or stall connections now and then, so try a few times
+        data = None
+        for attempt in range(1, TRIES + 1):
+            try:
+                with urllib.request.urlopen(request, timeout=60) as response:
+                    data = response.read()
+                break
+            except OSError as error:
+                if attempt == TRIES:
+                    raise DependencyError("could not download %s: %s" % (url, error))
+                print("  %s; trying again (%d of %d)" % (error, attempt + 1, TRIES), flush=True)
+                time.sleep(5)
         with open(path + ".partial", "wb") as handle:
             handle.write(data)
         os.replace(path + ".partial", path)

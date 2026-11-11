@@ -1,23 +1,21 @@
-// An example native mod (tools/pc/README.md, Native mods). Build it with the game:
+// An example native mod. Build it with the game:
 //   ninja -C build/pc64 pc_native_example
-// then copy build/pc64/native-example/win64.dll to mods/native-example/native/win64.dll, next to a
-// mod.json ({"id": "native-example", "side": "both", "api": 2}), a 16x16 textures/example_block.png and
-// sounds/chime.ogg (tools/pc/native-example/sounds/chime.ogg).
+// then copy build/pc64/native-example/win64.dll to Windows64/mods/native-example/native/win64.dll,
+// next to a mod.json ({"id": "native-example", "side": "both", "api": 2}), a 16x16
+// textures/example_block.png and sounds/chime.ogg (tools/pc/native-example/sounds/chime.ogg).
 // A mod that adds content must be "both": every player in a world needs it.
 //
 // It calls the game directly: Minecraft::GetInstance, the server's player list and a level's name
 // (a std::wstring the game makes and this mod frees, from the one heap they share). It also shows the
-// content hooks (tools/pc/README.md, Native content hooks): a block and a mob type registered while the
-// game starts, the mob spawned next to the first player, a chunk callback, and a message sent from the
-// player's game to the host and answered. It changes a vanilla behaviour with a function hook
-// (tools/pc/README.md, Function hooks): zombies that land a hit set their target on fire. Finally it adds
-// a status effect and an enchantment (tools/pc/README.md, Effects and enchantments): the player gets the
-// effect and an enchanted book once the world starts. It also keeps data (tools/pc/README.md, Mod data,
-// settings and keys): a setting in config/native-example.cfg, a key players can rebind under Controls,
-// a counter saved with the world and a flag saved with each player, so the gifts come only once. Last, a
-// structure spread over chunks (tools/pc/README.md, Structures): small stone brick towers, found by name.
-// And a sound of its own (tools/pc/README.md, Sounds): the example key makes the host play a chime at the
-// player, for everyone near them.
+// content hooks: a block and a mob type registered while the game starts, the mob spawned next to the
+// first player, a chunk callback, and a message sent from the player's game to the host and answered.
+// It changes a vanilla behaviour with a function hook: zombies that land a hit set their target on
+// fire. Finally it adds a status effect and an enchantment: the player gets the effect and an enchanted
+// book once the world starts. It also keeps data: a setting in config/native-example.cfg, a key players
+// can rebind under Controls, a counter saved with the world and a flag saved with each player, so the
+// gifts come only once. Last, a structure spread over chunks: small stone brick towers, found by name.
+// And a sound of its own: the example key makes the host play a chime at the player, for everyone near
+// them.
 
 #include "PcGameBuild.h"
 #include "platform/pc/PcNativeMod.h"

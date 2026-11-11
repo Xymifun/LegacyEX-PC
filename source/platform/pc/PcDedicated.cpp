@@ -189,7 +189,7 @@ bool WriteOperators(const std::set<std::string>& ops)
     FILE* fp = fopen(tmpPath.c_str(), "w");
     if (fp == 0)
         return false;
-    fprintf(fp, "# Identity uuids with host privileges on this server, one per line (see the README).\n");
+    fprintf(fp, "# Identity uuids with host privileges on this server, one per line.\n");
     for (std::set<std::string>::const_iterator it = ops.begin(); it != ops.end(); ++it)
         fprintf(fp, "%s\n", it->c_str());
     const bool ok = fclose(fp) == 0;
