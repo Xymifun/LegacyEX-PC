@@ -1,5 +1,9 @@
 #include "platform/pc/PcNativeMods.hpp"
+#include "platform/pc/PcFunctionHooks.hpp"
 #include "platform/pc/PcModHooks.hpp"
+#include "platform/pc/PcModStorage.hpp"
+#include "platform/pc/PcModStructures.hpp"
+#include "platform/pc/PcModSounds.hpp"
 
 #include "platform/pc/PcDedicated.hpp"
 #include "platform/pc/PcMods.hpp"
@@ -13,6 +17,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -21,9 +26,13 @@
 #include <windows.h>
 
 #include <boost/unordered_map.hpp>
+#include <cxxabi.h>
+#include <stdlib.h>
 #endif
 
 extern const char kPcContentVersion[];
+extern const char kPcAbiFlags[];
+extern const char kPcHeaderHashes[];
 
 namespace
 {
@@ -73,9 +82,28 @@ const char* CurrentId()
     return currentMod < nativeMods.size() ? nativeMods[currentMod]->id.c_str() : "?";
 }
 
+size_t ModFor(void* from)
+{
+    if (currentMod < nativeMods.size())
+        return currentMod;
+#ifdef _WIN32
+    HMODULE dll = 0;
+    if (from != 0
+        && GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                              (LPCWSTR)from, &dll))
+    {
+        for (size_t i = 0; i < nativeMods.size(); i++)
+            if (nativeMods[i]->dll == (void*)dll)
+                return i;
+    }
+#endif
+    return (size_t)(-1);
+}
+
 void Log(const char* msg)
 {
-    printf("[pc] native %s: %s\n", CurrentId(), msg != 0 ? msg : "");
+    size_t m = ModFor(__builtin_return_address(0));
+    printf("[pc] native %s: %s\n", m < nativeMods.size() ? nativeMods[m]->id.c_str() : "?", msg != 0 ? msg : "");
     fflush(stdout);
 }
 
@@ -329,6 +357,101 @@ bool ReadRecord(const std::string& path, PcNativeModRecord* rec, std::string* er
     return ok && found;
 }
 
+std::string ReadAbiList(const std::string& path)
+{
+    std::string list;
+    FILE* fp = fopen(path.c_str(), "rb");
+    if (fp == 0)
+        return list;
+    IMAGE_FILE_HEADER header;
+    std::vector<IMAGE_SECTION_HEADER> sections;
+    if (ReadSections(fp, &header, &sections))
+    {
+        for (size_t i = 0; i < sections.size(); ++i)
+        {
+            if (strncmp((const char*)sections[i].Name, ".pcabi", 8) != 0)
+                continue;
+            DWORD size = sections[i].SizeOfRawData;
+            if (size > 0 && size < 4 * 1024 * 1024)
+            {
+                list.resize(size);
+                if (!ReadAt(fp, (long)sections[i].PointerToRawData, &list[0], size))
+                    list.clear();
+            }
+            break;
+        }
+    }
+    fclose(fp);
+    size_t end = list.find('\0');
+    if (end != std::string::npos)
+        list.resize(end);
+    return list;
+}
+
+std::map<std::string, std::string>* headerHashes = 0;
+
+bool AbiMatches(const std::string& list, std::string* bad, int* used)
+{
+    if (headerHashes == 0)
+    {
+        headerHashes = new std::map<std::string, std::string>();
+        const char* p = kPcHeaderHashes;
+        while (*p)
+        {
+            const char* sp = strchr(p, ' ');
+            const char* nl = strchr(p, '\n');
+            if (sp == 0 || nl == 0 || sp > nl)
+                break;
+            (*headerHashes)[std::string(p, sp - p)] = std::string(sp + 1, nl - sp - 1);
+            p = nl + 1;
+        }
+    }
+    bool flags = false;
+    int n = 0;
+    int changed = 0;
+    size_t pos = 0;
+    while (pos < list.size())
+    {
+        size_t nl = list.find('\n', pos);
+        if (nl == std::string::npos)
+            nl = list.size();
+        std::string line = list.substr(pos, nl - pos);
+        pos = nl + 1;
+        size_t sp = line.find(' ');
+        if (sp == std::string::npos)
+            continue;
+        std::string name = line.substr(0, sp);
+        std::string hash = line.substr(sp + 1);
+        if (name == "flags")
+        {
+            flags = hash == kPcAbiFlags;
+            continue;
+        }
+        if (name == "platform/pc/PcNativeMod.h")
+            continue;
+        ++n;
+        std::map<std::string, std::string>::iterator it = headerHashes->find(name);
+        if (it != headerHashes->end() && it->second == hash)
+            continue;
+        if (++changed <= 5)
+        {
+            if (!bad->empty())
+                *bad += ", ";
+            *bad += name;
+        }
+    }
+    if (changed > 5)
+    {
+        char buf[32];
+        snprintf(buf, sizeof(buf), " and %d more", changed - 5);
+        *bad += buf;
+    }
+    if (!flags)
+        *bad = bad->empty() ? "the build settings" : "the build settings, " + *bad;
+    *used = n;
+    return flags && changed == 0;
+}
+
 boost::unordered_map<std::string, void*>* gameSymbols = 0;
 
 void LoadSymbols()
@@ -392,6 +515,51 @@ void* FindSymbol(const char* name)
     if (it == gameSymbols->end() && sizeof(void*) == 4)
         it = gameSymbols->find(std::string("_") + name);
     return it != gameSymbols->end() ? it->second : 0;
+}
+
+struct PlainName
+{
+    std::string name;
+    std::string key;
+    void* addr;
+};
+std::vector<PlainName>* plainNames = 0;
+
+std::string NoSpaces(const std::string& s)
+{
+    std::string out;
+    for (size_t i = 0; i < s.size(); i++)
+        if (s[i] != ' ')
+            out += s[i];
+    return out;
+}
+
+void LoadPlainNames()
+{
+    plainNames = new std::vector<PlainName>();
+    if (gameSymbols == 0)
+        LoadSymbols();
+    for (boost::unordered_map<std::string, void*>::const_iterator it = gameSymbols->begin(); it != gameSymbols->end(); ++it)
+    {
+        const char* sym = it->first.c_str();
+        if (sizeof(void*) == 4 && sym[0] == '_')
+            sym++;
+        if (strncmp(sym, "_Z", 2) != 0)
+            continue;
+        int status = 0;
+        char* d = abi::__cxa_demangle(sym, 0, 0, &status);
+        if (d == 0)
+            continue;
+        if (status == 0 && strchr(d, '(') != 0 && strstr(d, "thunk to ") == 0)
+        {
+            PlainName pn;
+            pn.name = d;
+            pn.key = NoSpaces(d);
+            pn.addr = it->second;
+            plainNames->push_back(pn);
+        }
+        free(d);
+    }
 }
 
 template <class T> T* At(HMODULE base, DWORD rva)
@@ -511,13 +679,31 @@ void StartMod(const PcMod& m)
     }
     rec.gameBuild[sizeof(rec.gameBuild) - 1] = 0;
     if (memcmp(rec.magic, "PCNATIVE", 8) != 0 || rec.abi != PC_NATIVE_ABI
-        || rec.pointerBits != sizeof(void*) * 8 || strcmp(rec.gameBuild, kPcContentVersion) != 0)
+        || rec.pointerBits != sizeof(void*) * 8)
     {
         printf("[pc] native %s: %s was built for game version %s (%u-bit), and this game is %s (%u-bit); "
                "not loaded: it must be built again for this game\n",
                m.id.c_str(), DLL_NAME, rec.gameBuild, rec.pointerBits, kPcContentVersion,
                (unsigned int)(sizeof(void*) * 8));
         return;
+    }
+    if (strcmp(rec.gameBuild, kPcContentVersion) != 0)
+    {
+        std::string list = ReadAbiList(path);
+        std::string bad;
+        int used = 0;
+        if (list.empty() || !AbiMatches(list, &bad, &used))
+        {
+            printf("[pc] native %s: %s was built for game version %s, and this game is %s", m.id.c_str(),
+                   DLL_NAME, rec.gameBuild, kPcContentVersion);
+            if (!bad.empty())
+                printf(" (changed since: %s)", bad.c_str());
+            printf("; not loaded: it must be built again for this game\n");
+            return;
+        }
+        printf("[pc] native %s: %s was built for game version %s; the %d game headers it uses are the same "
+               "in this game (%s), so it is loaded\n", m.id.c_str(), DLL_NAME, rec.gameBuild, used,
+               kPcContentVersion);
     }
 
     NativeMod* nm = new NativeMod();
@@ -553,6 +739,10 @@ void StartMod(const PcMod& m)
             nm->reg.modDirectory = nm->directory.c_str();
             nm->reg.log = Log;
             PcModHooksFillRegister(&nm->reg);
+            nm->reg.hookFunction = PcHookFunction;
+            PcModStorageFillRegister(&nm->reg);
+            PcModStructuresFillRegister(&nm->reg);
+            PcModSoundsFillRegister(&nm->reg);
             const int rc = reg(&nm->reg);
             if (rc != 0)
             {
@@ -612,6 +802,7 @@ void RunMain(size_t idx)
         host.sendKey = SendKey;
         host.sendChar = SendChar;
         PcModHooksFillHost(&host);
+        PcModStorageFillHost(&host);
         const int rc = modMain(&host);
         ok = rc == 0;
         if (!ok)
@@ -636,6 +827,64 @@ void RunMain(size_t idx)
     Drop(&hostTickCallbacks, idx);
     Drop(&hostStopCallbacks, idx);
 }
+#endif
+}
+
+void* PcNativeModsFindFunction(const char* name, std::string* found, std::string* err)
+{
+#ifdef _WIN32
+    if (name == 0 || name[0] == 0)
+    {
+        *err = "no function name given";
+        return 0;
+    }
+    void* p = FindSymbol(name);
+    if (p != 0)
+    {
+        *found = name;
+        return p;
+    }
+    if (plainNames == 0)
+        LoadPlainNames();
+    std::string want = NoSpaces(name);
+    bool full = want.find('(') != std::string::npos;
+    std::vector<size_t> hits;
+    for (size_t i = 0; i < plainNames->size(); i++)
+    {
+        const std::string& key = (*plainNames)[i].key;
+        bool match;
+        if (full)
+            match = key == want;
+        else
+            match = key.size() > want.size() && key.compare(0, want.size(), want) == 0 && key[want.size()] == '(';
+        if (!match)
+            continue;
+        bool same = false;
+        for (size_t j = 0; j < hits.size(); j++)
+            if ((*plainNames)[hits[j]].addr == (*plainNames)[i].addr)
+                same = true;
+        if (!same)
+            hits.push_back(i);
+    }
+    if (hits.empty())
+    {
+        *err = "the game has no function called that (or the compiler left it out, as nothing used it)";
+        return 0;
+    }
+    if (hits.size() > 1)
+    {
+        *err = "more than one function is called that, give the full signature:";
+        for (size_t i = 0; i < hits.size() && i < 6; i++)
+            *err += " \"" + (*plainNames)[hits[i]].name + "\"";
+        if (hits.size() > 6)
+            *err += " ...";
+        return 0;
+    }
+    *found = (*plainNames)[hits[0]].name;
+    return (*plainNames)[hits[0]].addr;
+#else
+    *err = "native mods need the Windows build";
+    return 0;
 #endif
 }
 
@@ -692,6 +941,20 @@ void PcNativeModsLoad()
         RunMain(i);
 #endif
     fflush(stdout);
+}
+
+const char* PcNativeModsIdFor(void* from)
+{
+    size_t m = ModFor(from);
+    return m < nativeMods.size() ? nativeMods[m]->id.c_str() : 0;
+}
+
+std::string PcNativeModsDirectoryOf(const char* id)
+{
+    for (size_t i = 0; id != 0 && i < nativeMods.size(); i++)
+        if (nativeMods[i]->id == id)
+            return nativeMods[i]->directory;
+    return std::string();
 }
 
 const char* PcNativeModsCurrentId()

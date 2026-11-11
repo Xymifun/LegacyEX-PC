@@ -17,6 +17,9 @@ void PcModHooksFillHost(PcNativeHost* host);
 void PcModHooksAddEntities();
 void PcModHooksAddBlockEntities();
 void PcModHooksAddRenderers(EntityRenderDispatcher* dispatcher);
+int PcModHooksAddEffects();
+void PcModHooksAddEnchantments();
+bool PcModHooksIsModEffect(int id);
 
 bool PcModHooksIsModType(unsigned long long type);
 const int PC_MOD_ENTITY_PACKET = 120;

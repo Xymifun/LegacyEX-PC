@@ -281,6 +281,7 @@ LevelData::LevelData(CompoundTag* tag)
     mLoadedPlayerTag = 0;
 #ifdef MINECRAFT_PC
     PcModContentReadWorldIds(tag, &mModBlockIds);
+    PcModStorageRead(tag, &mModData);
 #endif
 }
 
@@ -408,6 +409,7 @@ LevelData::LevelData(LevelData* other)
     mBiomeCentreZChunk = other->mBiomeCentreZChunk;
 #ifdef MINECRAFT_PC
     mModBlockIds = other->mModBlockIds;
+    mModData = other->mModData;
 #endif
 }
 
@@ -447,6 +449,7 @@ void LevelData::setTagData(CompoundTag* tag)
     tag->putLong(L"RandomSeed", mSeed);
 #ifdef MINECRAFT_PC
     PcModContentWriteWorldIds(tag, mModBlockIds);
+    PcModStorageWrite(tag, mModData);
 #endif
     tag->putString(L"generatorName", mGeneratorType->getGeneratorName());
     tag->putInt(L"generatorVersion", mGeneratorType->getVersion());

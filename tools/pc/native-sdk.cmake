@@ -17,7 +17,8 @@ foreach(line ${lines})
         continue()
     endif()
     if(name MATCHES "^_Z(T[ISV]|N|NK|GTtN|GTtNK)St(9bad_alloc|8bad_cast|10bad_typeid|9exception|13bad_exception|20bad_array_new_length|9type_info|16nested_exception)"
-       OR name MATCHES "^_ZSt[0-9]+__throw_bad_(alloc|cast|typeid|array_new_length)")
+       OR name MATCHES "^_Z(T[ISV]|N|NK|GTtN|GTtNK)St(11logic_error|12domain_error|16invalid_argument|12length_error|12out_of_range|13runtime_error|11range_error|14overflow_error|15underflow_error|12__cow_string)"
+       OR name MATCHES "^_ZSt[0-9]+__throw_")
         continue()
     endif()
     if(kind STREQUAL "T" OR kind STREQUAL "t")

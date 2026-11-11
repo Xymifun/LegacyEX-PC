@@ -1,4 +1,7 @@
 #include "game/world/OverworldLevelSource.hpp"
+#ifdef MINECRAFT_PC
+#include "platform/pc/PcModStructures.hpp"
+#endif
 #include "game/core/PIXNamedEvents.hpp"
 
 #include <algorithm>
@@ -65,6 +68,9 @@ OverworldLevelSource::OverworldLevelSource(Level* level, long long seed, bool ge
     mBuriedTreasure = new BuriedTreasureFeature(level->getLevelData()->getXZSize());
     mShipwreck = new ShipwreckFeature(this, mMonument);
     mOceanRuin = new OceanRuinFeature();
+#ifdef MINECRAFT_PC
+    mModStructures = PcModStructuresMake(level, 0, this);
+#endif
     mRandom = Random(seed);
     mPopulationRandom = Random(seed);
     mMinLimitNoise = new PerlinNoise(&mRandom, 16);
@@ -124,6 +130,9 @@ OverworldLevelSource::~OverworldLevelSource()
     delete mBuriedTreasure;
     delete mShipwreck;
     delete mOceanRuin;
+#ifdef MINECRAFT_PC
+    PcModStructuresFree(mModStructures);
+#endif
     delete mMinLimitNoise;
     delete mMaxLimitNoise;
     delete mMainNoise;
@@ -504,6 +513,9 @@ LevelChunk* OverworldLevelSource::createChunk(int chunkX, int chunkZ)
             mBuriedTreasure->apply(mLevel, chunkX, chunkZ, &primer);
             PIXEndNamedEvent();
         }
+#ifdef MINECRAFT_PC
+        PcModStructuresApply(mModStructures, mLevel, chunkX, chunkZ, &primer);
+#endif
     }
     PIXBeginNamedEvent(0.0f, "Creating chunk");
     LevelChunk* chunk = new LevelChunk(mLevel, &primer, chunkX, chunkZ);
@@ -609,6 +621,9 @@ void OverworldLevelSource::postProcess(int chunkX, int chunkZ)
             mBuriedTreasure->postProcess(mLevel, mPopulationRandom, &chunkPos);
         if (mSettings->useShipwrecks)
             mShipwreck->postProcess(mLevel, mPopulationRandom, &chunkPos);
+#ifdef MINECRAFT_PC
+        PcModStructuresPostProcess(mModStructures, mLevel, mPopulationRandom, &chunkPos);
+#endif
     }
     PIXEndNamedEvent();
     PIXBeginNamedEvent(0.0f, "Lakes");
@@ -683,6 +698,11 @@ std::vector<Biome::MobSpawnerData*>* OverworldLevelSource::getMobsAt(MobCategory
     Biome* biome = mLevel->getBiome(pos);
     if (mGenerateStructures)
     {
+#ifdef MINECRAFT_PC
+        std::vector<Biome::MobSpawnerData*>* modMobs = PcModStructuresMobs(mModStructures, category, pos);
+        if (modMobs != NULL)
+            return modMobs;
+#endif
         if ((category == MobCategory::MONSTER || category == MobCategory::SLIME) && mTemple->isSwamphut(pos))
         {
             return mTemple->getSwamphutEnemies();
@@ -716,6 +736,10 @@ bool OverworldLevelSource::isPosInFeature(Level*, const std::wstring& feature, c
         return mTemple->isInsideFeature(pos);
     if (LargeFeature::RUIN.compare(feature) == 0 && mOceanRuin != NULL)
         return mOceanRuin->isInsideFeature(pos);
+#ifdef MINECRAFT_PC
+    if (StructureFeature* modFeature = PcModStructuresFind(mModStructures, feature))
+        return modFeature->isInsideFeature(pos);
+#endif
     return false;
 }
 
@@ -742,6 +766,10 @@ BlockPos* OverworldLevelSource::findNearestMapFeature(Level* level, const std::w
         return mBuriedTreasure->getNearestGeneratedFeature(level, pos, takeBlock);
     if (LargeFeature::RUIN == feature && mOceanRuin != NULL)
         return mOceanRuin->getNearestGeneratedFeature(level, pos, takeBlock);
+#ifdef MINECRAFT_PC
+    if (StructureFeature* modFeature = PcModStructuresFind(mModStructures, feature))
+        return modFeature->getNearestGeneratedFeature(level, pos, takeBlock);
+#endif
     return NULL;
 }
 
@@ -767,4 +795,7 @@ void OverworldLevelSource::recreateLogicStructuresForChunk(LevelChunk*, int chun
         mBuriedTreasure->apply(mLevel, chunkX, chunkZ, NULL);
     if (mSettings->useOceanRuins)
         mOceanRuin->apply(mLevel, chunkX, chunkZ, NULL);
+#ifdef MINECRAFT_PC
+    PcModStructuresApply(mModStructures, mLevel, chunkX, chunkZ, NULL);
+#endif
 }

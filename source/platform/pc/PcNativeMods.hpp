@@ -2,11 +2,14 @@
 #define PLATFORM_PC_PCNATIVEMODS_HPP
 
 #include <stddef.h>
+#include <string>
 #include <vector>
 
 void PcNativeModsSetEnabled(bool enabled);
 void PcNativeModsRegister();
 void PcNativeModsLoad();
+const char* PcNativeModsIdFor(void* from);
+std::string PcNativeModsDirectoryOf(const char* id);
 const char* PcNativeModsCurrentId();
 size_t PcNativeModsCurrent();
 void PcNativeModsSetCurrent(size_t mod);
@@ -15,6 +18,8 @@ void PcNativeModsFrame();
 void PcNativeModsHostStart();
 void PcNativeModsHostTick();
 void PcNativeModsHostStop();
+
+void* PcNativeModsFindFunction(const char* name, std::string* found, std::string* err);
 
 bool PcNativeModsHideMenus();
 

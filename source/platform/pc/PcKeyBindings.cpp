@@ -8,6 +8,8 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <map>
+#include <vector>
 
 namespace
 {
@@ -130,6 +132,16 @@ const KeyName kKeyNames[] = {
 int codes[ePcKey_Count];
 bool loaded = false;
 
+struct ModKey
+{
+    std::string id;
+    std::wstring label;
+    int def;
+    int code;
+};
+std::vector<ModKey> modKeys;
+std::map<std::string, int> otherLines;
+
 std::string BindingsPath()
 {
     return PcSaveRoot() + "/" + BINDINGS_FILE;
@@ -147,26 +159,72 @@ void EnsureLoaded()
 }
 }
 
+int PcKeyBindingCount()
+{
+    return ePcKey_Count + (int)modKeys.size();
+}
+
+int PcKeyBindingsAddMod(const std::string& id, const std::wstring& label, int code)
+{
+    EnsureLoaded();
+    if (code != kPcKeyNone && !ValidCode(code))
+        code = kPcKeyNone;
+    for (size_t i = 0; i < modKeys.size(); i++)
+        if (modKeys[i].id == id)
+            return -1;
+    ModKey k;
+    k.id = id;
+    k.label = label;
+    k.def = code;
+    k.code = code;
+    std::map<std::string, int>::iterator it = otherLines.find(id);
+    if (it != otherLines.end())
+    {
+        if (it->second == kPcKeyNone || ValidCode(it->second))
+            k.code = it->second;
+        otherLines.erase(it);
+    }
+    modKeys.push_back(k);
+    return ePcKey_Count + (int)modKeys.size() - 1;
+}
+
 void PcKeyBindingsLoad()
 {
     loaded = true;
     for (int act = 0; act < ePcKey_Count; ++act)
         codes[act] = kBindings[act].code;
+    for (size_t i = 0; i < modKeys.size(); i++)
+        modKeys[i].code = modKeys[i].def;
+    otherLines.clear();
     FILE* fp = fopen(BindingsPath().c_str(), "r");
     if (fp == 0)
         return;
-    char line[128];
+    char line[192];
     while (fgets(line, sizeof(line), fp) != 0)
     {
-        char id[64];
+        char id[128];
         int code = 0;
-        if (sscanf(line, "%63[^=]=%d", id, &code) != 2)
+        if (sscanf(line, "%127[^=]=%d", id, &code) != 2)
             continue;
+        bool found = false;
         for (int act = 0; act < ePcKey_Count; ++act)
         {
             if (strcmp(id, kBindings[act].id) == 0)
+            {
                 codes[act] = code == kPcKeyNone || ValidCode(code) ? code : kBindings[act].code;
+                found = true;
+            }
         }
+        for (size_t i = 0; i < modKeys.size(); i++)
+        {
+            if (modKeys[i].id == id)
+            {
+                modKeys[i].code = code == kPcKeyNone || ValidCode(code) ? code : modKeys[i].def;
+                found = true;
+            }
+        }
+        if (!found && strchr(id, ':') != 0)
+            otherLines[id] = code;
     }
     fclose(fp);
 }
@@ -179,13 +237,20 @@ void PcKeyBindingsSave()
         return;
     for (int act = 0; act < ePcKey_Count; ++act)
         fprintf(fp, "%s=%d\n", kBindings[act].id, codes[act]);
+    for (size_t i = 0; i < modKeys.size(); i++)
+        fprintf(fp, "%s=%d\n", modKeys[i].id.c_str(), modKeys[i].code);
+    for (std::map<std::string, int>::iterator it = otherLines.begin(); it != otherLines.end(); ++it)
+        fprintf(fp, "%s=%d\n", it->first.c_str(), it->second);
     fclose(fp);
 }
 
 void PcKeyBindingsReset()
 {
+    EnsureLoaded();
     for (int act = 0; act < ePcKey_Count; ++act)
         codes[act] = kBindings[act].code;
+    for (size_t i = 0; i < modKeys.size(); i++)
+        modKeys[i].code = modKeys[i].def;
     loaded = true;
     PcKeyBindingsSave();
 }
@@ -193,30 +258,41 @@ void PcKeyBindingsReset()
 int PcKeyBinding(PcKeyAction act)
 {
     EnsureLoaded();
+    if (act >= ePcKey_Count && act < PcKeyBindingCount())
+        return modKeys[act - ePcKey_Count].code;
     return act >= 0 && act < ePcKey_Count ? codes[act] : kPcKeyNone;
 }
 
 int PcKeyBindingDefault(PcKeyAction act)
 {
+    if (act >= ePcKey_Count && act < PcKeyBindingCount())
+        return modKeys[act - ePcKey_Count].def;
     return act >= 0 && act < ePcKey_Count ? kBindings[act].code : kPcKeyNone;
 }
 
 void PcKeyBindingSet(PcKeyAction act, int code)
 {
     EnsureLoaded();
-    if (act < 0 || act >= ePcKey_Count || (code != kPcKeyNone && !ValidCode(code)))
+    if (act < 0 || act >= PcKeyBindingCount() || (code != kPcKeyNone && !ValidCode(code)))
         return;
-    codes[act] = code;
+    if (act >= ePcKey_Count)
+        modKeys[act - ePcKey_Count].code = code;
+    else
+        codes[act] = code;
     PcKeyBindingsSave();
 }
 
 PcKeySection PcKeyBindingSection(PcKeyAction act)
 {
+    if (act >= ePcKey_Count)
+        return ePcKeySection_Mods;
     return kBindings[act].section;
 }
 
 std::wstring PcKeyBindingLabel(PcKeyAction act)
 {
+    if (act >= ePcKey_Count && act < PcKeyBindingCount())
+        return modKeys[act - ePcKey_Count].label;
     if (kBindings[act].text != 0)
         return kBindings[act].text;
     return L10N::GetString(kBindings[act].label);
@@ -240,6 +316,8 @@ std::wstring PcKeySectionLabel(PcKeySection sec)
         return L10N::GetString(IDS_CONTROLS_SECTION_SPECTATING);
     case ePcKeySection_Glide:
         return L10N::GetString(IDS_CONTROLS_SECTION_GLIDE);
+    case ePcKeySection_Mods:
+        return L"Mods";
     default:
         return std::wstring();
     }
@@ -247,6 +325,8 @@ std::wstring PcKeySectionLabel(PcKeySection sec)
 
 int PcKeyBindingGameAction(PcKeyAction act)
 {
+    if (act >= ePcKey_Count)
+        return -1;
     return kBindings[act].gameAction;
 }
 

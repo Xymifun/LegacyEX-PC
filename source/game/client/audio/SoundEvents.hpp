@@ -704,6 +704,10 @@ public:
     static SoundEvent* BUBBLE_COLUMN_WHIRLPOOL_AMBIENT;
     static SoundEvent* BUBBLE_COLUMN_WHIRLPOOL_INSIDE;
 
+#ifdef MINECRAFT_PC
+    static SoundEvent* PcRegisterSound(SoundEvent* soundEvent) { return registerSound(soundEvent); }
+#endif
+
 private:
     friend class ClientboundSoundPacket;
 

@@ -29,6 +29,7 @@
 #include <vector>
 
 #include "platform/pc/PcGoldenAge.hpp"
+#include "platform/pc/PcModSounds.hpp"
 #endif
 
 #ifdef MINECRAFT_PC
@@ -420,6 +421,8 @@ void SoundEngine::play(const SoundEvent* sound, float x, float y, float z, float
 
 #ifdef MINECRAFT_PC
     const std::vector<char>* goldenAgeFile = instance == NULL ? PcGoldenAgeSoundFile(sound) : NULL;
+    if (goldenAgeFile == NULL)
+        goldenAgeFile = PcModSoundFile(sound);
     if (goldenAgeFile != NULL)
     {
         info.routeToDRC = false;
@@ -604,6 +607,27 @@ void SoundEngine::playStreaming(const SoundEvent* sound, float x, float y, float
 
 void SoundEngine::playUI(const SoundEvent* sound, float volume, float pitch)
 {
+#ifdef MINECRAFT_PC
+    const std::vector<char>* modFile = PcModSoundFile(sound);
+    if (modFile != NULL)
+    {
+        AudioInfo uiInfo;
+        std::memset(&uiInfo, 0, sizeof(AudioInfo));
+        uiInfo.volume = volume;
+        uiInfo.pitch = pitch;
+        uiInfo.soundEvent = sound;
+        uiInfo.isUI = true;
+        bool is3D = false;
+        float minDistance = 16.0f;
+        float playbackRate = pitch;
+        float x = 0.0f, y = 0.0f, z = 0.0f;
+        float uiVolume = volume;
+        ConfigureSound(this, &uiInfo, &is3D, &minDistance, &playbackRate, &x, &y, &z, &uiVolume);
+        m_platformSoundEngine->startSampleFile(&(*modFile)[0], false, minDistance, playbackRate, 0.0f, 0.0f, 0.0f,
+                                               uiVolume);
+        return;
+    }
+#endif
     char eventName[256];
     std::wstring soundName;
     if (!sound->isSFX())

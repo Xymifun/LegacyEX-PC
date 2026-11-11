@@ -37,7 +37,7 @@ const int KEY_ROW_FIRST = 100;
 
 bool IsKeyRow(int id)
 {
-    return id >= KEY_ROW_FIRST && id < KEY_ROW_FIRST + ePcKey_Count;
+    return id >= KEY_ROW_FIRST && id < KEY_ROW_FIRST + PcKeyBindingCount();
 }
 
 int KeyRowSize()
@@ -55,7 +55,7 @@ std::wstring KeyRowText(int code)
 std::wstring SharedBindingHelp(PcKeyAction action, int code)
 {
     std::wstring others;
-    for (int other = 0; other < ePcKey_Count; ++other)
+    for (int other = 0; other < PcKeyBindingCount(); ++other)
     {
         if (other == action || PcKeyBinding(static_cast<PcKeyAction>(other)) != code)
             continue;
@@ -1001,7 +1001,7 @@ void UIScene_ControlsMenu::InitKeyboard(int player)
 {
     m_controlsList.AddNewButton(L10N::GetString(IDS_RESET_TO_DEFAULTS), EControl_ResetToDefaults, true);
     int section = -1;
-    for (int action = 0; action < ePcKey_Count; ++action)
+    for (int action = 0; action < PcKeyBindingCount(); ++action)
     {
         const PcKeyAction key = static_cast<PcKeyAction>(action);
         if (PcKeyBindingSection(key) != section)
@@ -1045,7 +1045,7 @@ void UIScene_ControlsMenu::UpdateKeyboard()
 {
     m_controlsList.SetCheckboxValue(EControl_InvertLook,
                                     GameSettings::GetGameSettings(m_playerId, eGameSetting_InvertLook) != 0, false);
-    for (int action = 0; action < ePcKey_Count; ++action)
+    for (int action = 0; action < PcKeyBindingCount(); ++action)
     {
         const int code = PcKeyBinding(static_cast<PcKeyAction>(action));
         m_controlsList.SetSecondaryLabel(KEY_ROW_FIRST + action, UIString(KeyRowText(code)), true,

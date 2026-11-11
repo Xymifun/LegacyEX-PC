@@ -3,9 +3,10 @@
 
 /* Native mods (tools/pc/README.md, Native mods): a mod's native/win64.dll (or native/win32.dll for the
  * 32-bit build) is C++ built against this game's sources, with this game's compiler and flags
- * (pc_add_native_mod in tools/pc/CMakeLists.txt). It runs only on the exact build it was made for: the
- * game reads the record below from the DLL's file before it loads it, and refuses a DLL made for
- * another build.
+ * (pc_add_native_mod in tools/pc/CMakeLists.txt). The game reads the record below from the DLL's file
+ * before it loads it. It runs on the build it was made for, and on other builds only when every game
+ * header it was compiled against is unchanged there (the .pcabi section pc_add_native_mod adds); any
+ * other DLL is refused.
  *
  * A mod calls the game directly: it includes the game's headers and links libpcgame.a, an import
  * library for every function and variable of the game, as if the game were a DLL named pcgame.dll. The
@@ -220,6 +221,22 @@ typedef void* (*PcNativeMakeItem)(int id);         /* an Item */
 typedef void* (*PcNativeMakeBlockEntity)(void);    /* a BlockEntity */
 typedef void* (*PcNativeMakeEntity)(void* level);  /* an Entity, for that Level */
 typedef void* (*PcNativeMakeRenderer)(void* dispatcher);  /* an EntityRenderer, for the EntityRenderDispatcher */
+typedef void* (*PcNativeMakeEffect)(void);         /* a MobEffect */
+typedef void* (*PcNativeMakeEnchantment)(void);    /* an Enchantment */
+typedef void* (*PcNativeMakeStructure)(void* level, void* levelSource);  /* a StructureFeature, for that world */
+typedef void* (*PcNativeMakeStructureStart)(void);  /* an empty StructureStart, to load a saved one into */
+typedef void* (*PcNativeMakeStructurePiece)(void);  /* an empty StructurePiece, to load a saved one into */
+/* what spawns at pos (a BlockPos) in this structure (its StructureFeature) for that MobCategory: a
+   std::vector<Biome::MobSpawnerData*>* the mod keeps, or 0 for the biome's own mobs */
+typedef void* (*PcNativeStructureMobs)(void* feature, void* category, const void* pos);
+
+/* dimensions for addStructure */
+enum
+{
+    PC_NATIVE_OVERWORLD = 1,
+    PC_NATIVE_NETHER = 2,
+    PC_NATIVE_END = 4
+};
 
 /* What the game gives PcNativeModRegister. Names are the mod's own ("copper_lamp"); the game puts the mod's id
    in front ("mymod:copper_lamp"). Blocks and items get ids like content.lua's do, and worlds keep them the same
@@ -242,7 +259,74 @@ typedef struct PcNativeRegister
     unsigned long long (*addBlockEntity)(const char* name, unsigned long long family, PcNativeMakeBlockEntity make);
     unsigned long long (*addEntity)(const char* name, unsigned long long family, PcNativeMakeEntity make);
     void (*addEntityRenderer)(unsigned long long type, PcNativeMakeRenderer make);
+
+    /* Replaces a game function with the mod's own (README, Function hooks), for every caller, virtual calls
+       included. name is the function as `llvm-nm -C` prints it: "Zombie::doHurtTarget" when only one function
+       has that name, else the full signature "Zombie::doHurtTarget(boost::shared_ptr<Entity>)"; a mangled
+       name works too. replacement is a plain function with the same return type and arguments, and for a
+       member function the object first: bool MyHit(Zombie* self, boost::shared_ptr<Entity> target).
+       *original gets the function to call for the game's own code (or for the hook another mod put there
+       first). Returns 1 when hooked, 0 when not (the log says why). Calls the compiler inlined into other
+       functions of the same source file skip the hook, and a subclass's override is a function of its own. */
+    int (*hookFunction)(const char* name, void* replacement, void** original);
+
+    /* A status effect (a MobEffect, usually a subclass with its own applyEffectTick). The game makes it right
+       after its own effects and registers it as "modid:name" (MobEffect::byName finds it); displayName shows
+       in the inventory. Its id is 64 to 255, from a hash of the name, the same on every game with the same
+       mods; saved effects also keep the name. For an icon the effect calls setIcon with one of the game's.
+       Returns 1 when added, 0 when not. */
+    int (*addEffect)(const char* name, const char* displayName, PcNativeMakeEffect make);
+    /* An enchantment (an Enchantment subclass: its category and canEnchant pick the items, its rarity, levels
+       and costs how often the enchanting table offers it). Registered as "modid:name" after the game's own, so
+       the enchanting table, books, the anvil, loot and the creative menu find it. Items keep its id (1000 to
+       30999, from a hash of the name). Returns 1 when added, 0 when not. */
+    int (*addEnchantment)(const char* name, const char* displayName, PcNativeMakeEnchantment make);
+
+    /* The mod's settings: config/MODID.cfg in the player's game folder (next to pcsettings.txt), "key=value"
+       lines a player can edit while the game is closed. A key the file does not have yet gets defaultValue,
+       and is written into the file with its comment (one line or several, without the #), so players see
+       every setting. getConfig's text stays valid until setConfig changes that key. Here and in PcNativeHost. */
+    const char* (*getConfig)(const char* key, const char* defaultValue, const char* comment);
+    int (*getConfigInt)(const char* key, int defaultValue, const char* comment);
+    void (*setConfig)(const char* key, const char* value);
+    /* A key of the mod's own, listed under "Mods" in Controls (keyboard) where players rebind it; kept in
+       keybinds.txt. defaultKey is a Windows virtual-key code ('G', 0x70 for F1...) or a PC_NATIVE_MOUSE_*
+       button; 0 leaves it unbound. Returns the key for PcNativeHost's keyDown and keyPressed, or 0. */
+    int (*addKey)(const char* name, const char* label, int defaultKey);
+
+    /* A structure spread over chunks, as villages and temples are (README, Structures): a StructureFeature
+       subclass. Every world generator of those dimensions (PC_NATIVE_*; normal worlds, not flat ones) makes
+       one with make, and runs it as its own structures when "Generate Structures" is on: isFeatureChunk picks
+       the chunks that start one, createStructureStart lays out its pieces (kept in the world's saved data
+       under getFeatureName, best "modid_name"), postProcess builds them chunk by chunk.
+       Level::findNearestMapFeature and isPosInFeature find it as "modid:name" (explorer maps, the mod's own
+       items). mobs (or 0) picks what spawns inside it. Returns 1 when added. */
+    int (*addStructure)(const char* name, int dimensions, PcNativeMakeStructure make, PcNativeStructureMobs mobs);
+    /* The mod's StructureStart and StructurePiece classes, saved by name: what their GetType() must return
+       (as EStructureStart / EStructurePiece). make returns an empty one the game loads saved data into.
+       0 when not added. */
+    unsigned int (*addStructureStart)(const char* name, PcNativeMakeStructureStart make);
+    unsigned int (*addStructurePiece)(const char* name, PcNativeMakeStructurePiece make);
+
+    /* A sound of the mod's own (README, Sounds): a SoundEvent named "modid:name" that plays the mod's
+       sounds/FILE instead of one of the game's. files is one file or several split by ';' ("step1.ogg;
+       step2.ogg"), one picked at random each time: .wav (PCM or ADPCM), .ogg (Vorbis) or .mp3, mono or
+       stereo, up to 16 MB each (an ogg or mp3 up to about 3 minutes, kept decoded). range is how far
+       it carries in blocks at volume 1 (0 for the game's usual 16). Returns the SoundEvent* to play like the
+       game's (Level::playSound sends it to every player near it), or 0. A looping or moving sound
+       (SoundInstance) plays once, where it starts. */
+    void* (*addSound)(const char* name, const char* files, float range);
 } PcNativeRegister;
+
+/* mouse buttons for addKey */
+enum
+{
+    PC_NATIVE_MOUSE_LEFT = 0x101,
+    PC_NATIVE_MOUSE_RIGHT = 0x102,
+    PC_NATIVE_MOUSE_MIDDLE = 0x103,
+    PC_NATIVE_MOUSE_4 = 0x104,
+    PC_NATIVE_MOUSE_5 = 0x105
+};
 
 /* optional, as well as PcNativeModMain: 0 when it registered; anything else and the mod is not loaded */
 typedef int (*PcNativeModRegisterFn)(const PcNativeRegister* reg);
@@ -313,10 +397,30 @@ typedef struct PcNativeHost
        the thread that made the chunk. */
     void (*onChunkDecorated)(PcNativeChunkCallback callback, void* user);
     /* messages between the mod on the host and on the players' games: channel up to 32 characters, data up to
-       30000 bytes. onMessage gets the sending ServerPlayer on the host, and 0 on a player's game. */
+       30000 bytes. onMessage gets the sending ServerPlayer on the host, and 0 on a player's game. sendToHost
+       drops the message while the player is not connected to a world (in menus, or while one loads). */
     void (*sendToHost)(const char* channel, const void* data, int size);
     void (*sendToPlayer)(void* serverPlayer, const char* channel, const void* data, int size);  /* 0: everyone */
     void (*onMessage)(PcNativeMessageCallback callback, void* user);
+
+    /* as in PcNativeRegister */
+    const char* (*getConfig)(const char* key, const char* defaultValue, const char* comment);
+    int (*getConfigInt)(const char* key, int defaultValue, const char* comment);
+    void (*setConfig)(const char* key, const char* value);
+    /* host: bytes the mod keeps with the world it runs (from onHostStart until onHostStop), saved in its
+       level.dat whenever the world saves. getWorldData gives them and their size (0 and size 0 if there are
+       none); the pointer stays valid until the next setWorldData. setWorldData replaces them (size 0 removes
+       them; up to 4 MB). On a player's game there is no world of the host's: 0. */
+    const void* (*getWorldData)(int* size);
+    void (*setWorldData)(const void* data, int size);
+    /* host: the same for one player (a ServerPlayer), saved with the player and kept through death and
+       changing dimension */
+    const void* (*getPlayerData)(void* serverPlayer, int* size);
+    void (*setPlayerData)(void* serverPlayer, const void* data, int size);
+    /* main thread: a key from addKey. keyDown is 1 while it is held during play (not in menus, chat or while
+       typing); keyPressed is how many times it was pressed during play since the last call. */
+    int (*keyDown)(int key);
+    int (*keyPressed)(int key);
 } PcNativeHost;
 
 /* The mod's entry point: 0 when it started; anything else and the game unloads it. */

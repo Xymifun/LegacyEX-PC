@@ -2,6 +2,9 @@
 #define GAME_WORLD_OVERWORLDLEVELSOURCE_HPP
 
 #include <string>
+#ifdef MINECRAFT_PC
+#include "platform/pc/PcModStructures.hpp"
+#endif
 #include <vector>
 
 #include "game/util/Random.hpp"
@@ -90,6 +93,9 @@ private:
     BuriedTreasureFeature* mBuriedTreasure;
     ShipwreckFeature* mShipwreck;
     OceanRuinFeature* mOceanRuin;
+#ifdef MINECRAFT_PC
+    PcModFeatures* mModStructures;
+#endif
 };
 
 #endif

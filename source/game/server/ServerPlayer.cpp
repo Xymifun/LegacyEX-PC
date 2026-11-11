@@ -1863,6 +1863,9 @@ void ServerPlayer::completeUsingItem()
 
 void ServerPlayer::restoreFrom(boost::shared_ptr<Player> oldPlayer, bool keepEverything)
 {
+#ifdef MINECRAFT_PC
+    mModData = oldPlayer->mModData;
+#endif
     if (keepEverything)
     {
         mInventory->replaceWith(oldPlayer->mInventory);
@@ -1883,7 +1886,6 @@ void ServerPlayer::restoreFrom(boost::shared_ptr<Player> oldPlayer, bool keepEve
     }
 
     mEnchantmentSeed = oldPlayer->mEnchantmentSeed;
-
 
     mEnderChestInventory = oldPlayer->mEnderChestInventory;
 

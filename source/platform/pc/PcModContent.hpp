@@ -26,6 +26,7 @@ bool PcModContentAddNativeItem(const std::string& mod, const char* name, const c
 const wchar_t* PcModContentAddNativeTexture(int atlas, const std::string& mod, const char* file);
 
 const wchar_t* PcModContentString(int id);
+int PcModContentAddName(const char* text);
 
 enum PcModTab
 {

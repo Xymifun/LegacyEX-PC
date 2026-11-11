@@ -145,6 +145,7 @@ bool s_debugFillAreaRequest = false;
 bool s_debugSchematicRequest = false;
 char16_t s_chatRequest = 0;
 bool s_chatOpen = false;
+std::vector<int> modPresses;
 bool s_screenshotRequest = false;
 std::vector<int> s_scriptKeys;
 bool s_hoverPending = false;
@@ -427,6 +428,17 @@ void CodePressed(int code, InputContext context)
     }
     if (code == PcKeyBinding(ePcKey_Screenshot))
         s_screenshotRequest = true;
+    if (s_inGame && context == eInputContext_Game && !s_chatOpen && !s_textEntry)
+    {
+        for (int act = ePcKey_Count; act < PcKeyBindingCount(); act++)
+        {
+            if (PcKeyBinding((PcKeyAction)act) != code)
+                continue;
+            if ((int)modPresses.size() < act - ePcKey_Count + 1)
+                modPresses.resize(act - ePcKey_Count + 1, 0);
+            modPresses[act - ePcKey_Count]++;
+        }
+    }
     if (s_inGame && context == eInputContext_Game && s_chatRequest == 0)
     {
         if (code == PcKeyBinding(ePcKey_Chat))
@@ -1195,6 +1207,24 @@ int PcInputConsumeScriptKey()
 bool PcInputPushToTalkHeld()
 {
     return s_focused && !s_chatOpen && !s_textEntry && CodeDown(PcKeyBinding(ePcKey_PushToTalk));
+}
+
+bool PcInputModKeyHeld(int action)
+{
+    if (action < ePcKey_Count || action >= PcKeyBindingCount())
+        return false;
+    return s_focused && !s_chatOpen && !s_textEntry && CurrentContext() == eInputContext_Game
+           && CodeHeldIn(PcKeyBinding((PcKeyAction)action), eInputContext_Game);
+}
+
+int PcInputModKeyPresses(int action)
+{
+    int i = action - ePcKey_Count;
+    if (i < 0 || i >= (int)modPresses.size())
+        return 0;
+    int n = modPresses[i];
+    modPresses[i] = 0;
+    return n;
 }
 
 bool PcInputKeyHeld(int key)

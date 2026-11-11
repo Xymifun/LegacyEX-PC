@@ -2,6 +2,9 @@
 #define GAME_WORLD_NETHERLEVELSOURCE_HPP
 
 #include <string>
+#ifdef MINECRAFT_PC
+#include "platform/pc/PcModStructures.hpp"
+#endif
 #include <vector>
 
 #include "game/core/PerlinNoise.hpp"
@@ -66,6 +69,9 @@ private:
     BushFeature* mBrownMushroom;
     BushFeature* mRedMushroom;
     NetherBridgeFeature* mNetherBridgeFeature;
+#ifdef MINECRAFT_PC
+    PcModFeatures* mModStructures;
+#endif
     LargeHellCaveFeature* mCaves;
 };
 

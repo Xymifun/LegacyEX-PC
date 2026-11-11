@@ -61,6 +61,7 @@ enum PcKeySection
     ePcKeySection_MiniGameLobby,
     ePcKeySection_Spectating,
     ePcKeySection_Glide,
+    ePcKeySection_Mods,
     ePcKeySection_Count
 };
 
@@ -72,6 +73,9 @@ const int kPcKeyMouse4 = 0x104;
 const int kPcKeyMouse5 = 0x105;
 const int kPcKeyMouseFirst = kPcKeyMouseLeft;
 const int kPcKeyMouseCount = 5;
+
+int PcKeyBindingCount();
+int PcKeyBindingsAddMod(const std::string& id, const std::wstring& label, int code);
 
 void PcKeyBindingsLoad();
 void PcKeyBindingsSave();

@@ -20,11 +20,16 @@ class LevelSettings;
 class SuperflatConfig;
 class Player;
 
+#ifdef MINECRAFT_PC
+#include "platform/pc/PcModStorage.hpp"
+#endif
+
 class LevelData
 {
 public:
 #ifdef MINECRAFT_PC
     std::vector<std::pair<std::wstring, int> > mModBlockIds;
+    PcModData mModData;
 #endif
     LevelData();
     explicit LevelData(CompoundTag* tag);

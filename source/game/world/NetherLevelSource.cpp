@@ -1,4 +1,7 @@
 #include "game/world/NetherLevelSource.hpp"
+#ifdef MINECRAFT_PC
+#include "platform/pc/PcModStructures.hpp"
+#endif
 
 #include <cmath>
 
@@ -63,6 +66,9 @@ NetherLevelSource::NetherLevelSource(Level* level, bool generateStructures, long
     mBrownMushroom = new BushFeature(static_cast<Bush*>(Blocks::brown_mushroom));
     mRedMushroom = new BushFeature(static_cast<Bush*>(Blocks::red_mushroom));
     mNetherBridgeFeature = new NetherBridgeFeature();
+#ifdef MINECRAFT_PC
+    mModStructures = PcModStructuresMake(level, -1, this);
+#endif
     mCaves = new LargeHellCaveFeature();
 }
 
@@ -85,6 +91,9 @@ NetherLevelSource::~NetherLevelSource()
     delete mBrownMushroom;
     delete mRedMushroom;
     delete mNetherBridgeFeature;
+#ifdef MINECRAFT_PC
+    PcModStructuresFree(mModStructures);
+#endif
     delete mCaves;
 }
 
@@ -430,6 +439,9 @@ LevelChunk* NetherLevelSource::createChunk(int chunkX, int chunkZ)
     if (mGenerateStructures)
     {
         mNetherBridgeFeature->apply(mLevel, chunkX, chunkZ, &primer);
+#ifdef MINECRAFT_PC
+        PcModStructuresApply(mModStructures, mLevel, chunkX, chunkZ, &primer);
+#endif
     }
 
     LevelChunk* chunk = new LevelChunk(mLevel, &primer, chunkX, chunkZ);
@@ -453,6 +465,10 @@ void NetherLevelSource::postProcess(int chunkX, int chunkZ)
                               ^ mLevel->getSeed());
 
     mNetherBridgeFeature->postProcess(mLevel, mPopulationRandom, &chunkPos);
+#ifdef MINECRAFT_PC
+    if (mGenerateStructures)
+        PcModStructuresPostProcess(mModStructures, mLevel, mPopulationRandom, &chunkPos);
+#endif
 
     for (int i = 0; i < 8; ++i)
     {
@@ -532,6 +548,12 @@ bool NetherLevelSource::postProcessLoadedChunk(LevelChunk* chunk, int chunkX, in
 
 std::vector<Biome::MobSpawnerData*>* NetherLevelSource::getMobsAt(MobCategory* category, const BlockPos& pos)
 {
+#ifdef MINECRAFT_PC
+    std::vector<Biome::MobSpawnerData*>* modMobs =
+        mGenerateStructures ? PcModStructuresMobs(mModStructures, category, pos) : NULL;
+    if (modMobs != NULL)
+        return modMobs;
+#endif
     if (category == MobCategory::MONSTER)
     {
         if (mNetherBridgeFeature->isInsideFeature(pos))
@@ -556,12 +578,20 @@ BlockPos* NetherLevelSource::findNearestMapFeature(Level* level, const std::wstr
     {
         return mNetherBridgeFeature->getNearestGeneratedFeature(level, pos, findUnexplored);
     }
+#ifdef MINECRAFT_PC
+    if (StructureFeature* modFeature = PcModStructuresFind(mModStructures, feature))
+        return modFeature->getNearestGeneratedFeature(level, pos, findUnexplored);
+#endif
     return NULL;
 }
 
 void NetherLevelSource::recreateLogicStructuresForChunk(LevelChunk* chunk, int chunkX, int chunkZ)
 {
     mNetherBridgeFeature->apply(mLevel, chunkX, chunkZ, NULL);
+#ifdef MINECRAFT_PC
+    if (mGenerateStructures)
+        PcModStructuresApply(mModStructures, mLevel, chunkX, chunkZ, NULL);
+#endif
 }
 
 bool NetherLevelSource::isPosInFeature(Level* level, const std::wstring& feature, const BlockPos& pos)
@@ -570,5 +600,9 @@ bool NetherLevelSource::isPosInFeature(Level* level, const std::wstring& feature
     {
         return mNetherBridgeFeature->isInsideFeature(pos);
     }
+#ifdef MINECRAFT_PC
+    if (StructureFeature* modFeature = PcModStructuresFind(mModStructures, feature))
+        return modFeature->isInsideFeature(pos);
+#endif
     return false;
 }

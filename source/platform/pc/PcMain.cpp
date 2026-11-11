@@ -854,12 +854,16 @@ void RunFrame(Minecraft* minecraft)
 int main(int argc, char** argv)
 {
     bool terminal = false;
+    bool dedicated = false;
     for (int i = 1; i < argc; ++i)
+    {
         terminal = terminal || strcmp(argv[i], "--terminal") == 0;
+        dedicated = dedicated || strcmp(argv[i], "--dedicated") == 0;
+    }
 #ifdef _WIN32
     PcStartupLog("main: started");
 #endif
-    PcOsPrepareOutput(terminal);
+    PcOsPrepareOutput(terminal, dedicated);
 #ifdef _WIN32
     PcStartupLog("main: output ready");
 #endif

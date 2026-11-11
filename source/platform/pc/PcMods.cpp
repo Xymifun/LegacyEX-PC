@@ -653,34 +653,47 @@ void PcModsLoad()
         printf("[pc] mods: disabled (--no-mods)\n");
         return;
     }
-    if (!IsDirectory(modsDir))
+    std::vector<std::string> dirs;
+    if (modsDirSet)
     {
-        if (modsDirSet)
+        if (!IsDirectory(modsDir))
+        {
             printf("[pc] mods: %s is not a folder; no mods loaded\n", modsDir.c_str());
-        else
-            PcOsMakeDirectory(modsDir.c_str());
-        return;
+            return;
+        }
+        dirs.push_back(modsDir);
+    }
+    else
+    {
+        PcOsMakeDirectory("Windows64");
+        PcOsMakeDirectory("Windows64/mods");
+        dirs.push_back("Windows64/mods");
+        if (IsDirectory("mods"))
+            dirs.push_back("mods");
     }
 
-    std::vector<std::string> folders = ListDirectory(modsDir);
-    for (size_t i = 0; i < folders.size(); ++i)
+    for (size_t d = 0; d < dirs.size(); ++d)
     {
-        std::string dir = modsDir + "/" + folders[i];
-        if (!IsDirectory(dir))
-            continue;
-        PcMod m;
-        if (!ReadManifest(folders[i], dir, &m))
-            continue;
-        bool dup = false;
-        for (size_t j = 0; j < allMods.size() && !dup; ++j)
-            dup = allMods[j].id == m.id;
-        if (dup)
+        std::vector<std::string> folders = ListDirectory(dirs[d]);
+        for (size_t i = 0; i < folders.size(); ++i)
         {
-            printf("[pc] mods: skipping %s: another folder already has the id \"%s\"\n", folders[i].c_str(),
-                   m.id.c_str());
-            continue;
+            std::string dir = dirs[d] + "/" + folders[i];
+            if (!IsDirectory(dir))
+                continue;
+            PcMod m;
+            if (!ReadManifest(folders[i], dir, &m))
+                continue;
+            bool dup = false;
+            for (size_t j = 0; j < allMods.size() && !dup; ++j)
+                dup = allMods[j].id == m.id;
+            if (dup)
+            {
+                printf("[pc] mods: skipping %s: another folder already has the id \"%s\"\n", dir.c_str(),
+                       m.id.c_str());
+                continue;
+            }
+            allMods.push_back(m);
         }
-        allMods.push_back(m);
     }
     std::stable_sort(allMods.begin(), allMods.end(), LoadsBefore);
 
@@ -713,7 +726,10 @@ void PcModsLoad()
         printf("[pc] mods: %u more files are provided by more than one mod\n", conflicts - MAX_CONFLICT_LINES);
     HashGameplayFiles();
 
-    printf("[pc] mods: %u loaded from %s\n", (unsigned int)allMods.size(), modsDir.c_str());
+    std::string from = dirs[0];
+    for (size_t d = 1; d < dirs.size(); ++d)
+        from += " and " + dirs[d];
+    printf("[pc] mods: %u loaded from %s\n", (unsigned int)allMods.size(), from.c_str());
     for (size_t i = 0; i < allMods.size(); ++i)
         printf("[pc] mods:   %s %s, %s side (%u files, %u scripts, %u change gameplay)\n", allMods[i].id.c_str(),
                allMods[i].version.empty() ? "-" : allMods[i].version.c_str(), allMods[i].side.c_str(), allMods[i].files,

@@ -9,6 +9,10 @@
 #include "game/client/render/EntityRenderer.hpp"
 #include "game/core/Minecraft.hpp"
 #include "game/entity/mob/EntityIO.hpp"
+#include "game/entity/mob/MobEffect.hpp"
+#include "game/item/Enchantment.hpp"
+#include "game/util/ResourceLocation.hpp"
+#include "game/world/block/MappedRegistry.hpp"
 #include "game/network/ClientPacketListener.hpp"
 #include "game/network/ClientboundCustomPayloadPacket.hpp"
 #include "game/network/ServerGamePacketListenerImpl.hpp"
@@ -40,6 +44,10 @@ const int CONTAINER_FIRST = 100;
 const int CONTAINER_COUNT = 100;
 const int MAX_CHANNEL = 32;
 const int MAX_MESSAGE = 30000;
+const int EFFECT_ID_FIRST = 64;
+const int EFFECT_ID_COUNT = 192;
+const int ENCHANT_ID_FIRST = 1000;
+const int ENCHANT_ID_COUNT = 30000;
 
 struct EntityDef
 {
@@ -78,6 +86,16 @@ struct ContainerDef
     size_t mod;
 };
 
+struct NamedDef
+{
+    std::string key;
+    std::string mod;
+    std::string name;
+    std::string display;
+    void* (*make)();
+    size_t modIdx;
+};
+
 struct ChunkHook
 {
     PcNativeChunkCallback fn;
@@ -102,6 +120,10 @@ std::vector<MessageHook> messageHooks;
 unsigned int nextType = 1;
 bool entitiesDone = false;
 bool blockEntitiesDone = false;
+std::vector<NamedDef> effects;
+std::vector<NamedDef> enchants;
+bool effectsDone = false;
+bool enchantsDone = false;
 
 std::wstring Widen(const std::string& s)
 {
@@ -204,6 +226,59 @@ unsigned long long AddEntity(const char* name, unsigned long long family, PcNati
     return d.type;
 }
 
+int AddNamed(std::vector<NamedDef>* list, bool done, const char* what, const char* name, const char* display,
+             void* (*make)())
+{
+    std::string key = std::string(PcNativeModsCurrentId()) + ":" + (name != 0 ? name : "");
+    bool taken = false;
+    for (size_t i = 0; i < list->size(); i++)
+        if ((*list)[i].key == key)
+            taken = true;
+    if (done || taken || !GoodName(name) || make == 0)
+    {
+        std::string w = what;
+        if (done)
+            w += " (too late, register it in PcNativeModRegister)";
+        else if (taken)
+            w += " (that name is taken)";
+        Say(w.c_str(), name);
+        return 0;
+    }
+    NamedDef d;
+    d.key = key;
+    d.mod = PcNativeModsCurrentId();
+    d.name = name;
+    d.display = display != 0 ? display : name;
+    d.make = make;
+    d.modIdx = PcNativeModsCurrent();
+    list->push_back(d);
+    return 1;
+}
+
+int AddEffect(const char* name, const char* displayName, PcNativeMakeEffect make)
+{
+    return AddNamed(&effects, effectsDone, "effect", name, displayName, make);
+}
+
+int AddEnchantment(const char* name, const char* displayName, PcNativeMakeEnchantment make)
+{
+    return AddNamed(&enchants, enchantsDone, "enchantment", name, displayName, make);
+}
+
+bool NamedByKey(const NamedDef& a, const NamedDef& b)
+{
+    return a.key < b.key;
+}
+
+void* MakeNamed(const NamedDef& d)
+{
+    size_t prev = PcNativeModsCurrent();
+    PcNativeModsSetCurrent(d.modIdx);
+    void* p = d.make();
+    PcNativeModsSetCurrent(prev);
+    return p;
+}
+
 void AddEntityRenderer(unsigned long long type, PcNativeMakeRenderer make)
 {
     if (type == 0 || make == 0)
@@ -301,7 +376,11 @@ void SendToHost(const char* channel, const void* data, int size)
     arrayWithLength<unsigned char> buf = Pack(channel, data, size);
     if (buf.data == 0)
         return;
-    ClientPacketListener* conn = Minecraft::GetInstance()->getConnection(gProfile->GetPrimaryPad());
+    Minecraft* mc = Minecraft::GetInstance();
+    int pad = gProfile->GetPrimaryPad();
+    ClientPacketListener* conn = 0;
+    if (mc != 0 && pad >= 0 && pad < 4 && mc->mLocalPlayers[pad] != 0)
+        conn = mc->getConnection(pad);
     if (conn == 0)
     {
         delete[] buf.data;
@@ -346,6 +425,8 @@ void PcModHooksFillRegister(PcNativeRegister* reg)
     reg->addBlockEntity = AddBlockEntity;
     reg->addEntity = AddEntity;
     reg->addEntityRenderer = AddEntityRenderer;
+    reg->addEffect = AddEffect;
+    reg->addEnchantment = AddEnchantment;
 }
 
 void PcModHooksFillHost(PcNativeHost* host)
@@ -405,6 +486,93 @@ void PcModHooksAddBlockEntities()
     }
     printf("[pc] native: %u mod block entity types\n", (unsigned int)blockEntities.size());
     fflush(stdout);
+}
+
+int PcModHooksAddEffects()
+{
+    PcNativeModsRegister();
+    effectsDone = true;
+    std::sort(effects.begin(), effects.end(), NamedByKey);
+    int top = 0;
+    int n = 0;
+    for (size_t i = 0; i < effects.size(); i++)
+    {
+        NamedDef& d = effects[i];
+        int slot = (int)(Hash(d.key) % (unsigned int)EFFECT_ID_COUNT);
+        int tries = 0;
+        while (MobEffect::mobEffectRegistry->containsId(EFFECT_ID_FIRST + slot) && tries < EFFECT_ID_COUNT)
+        {
+            slot = (slot + 1) % EFFECT_ID_COUNT;
+            tries++;
+        }
+        if (tries >= EFFECT_ID_COUNT)
+        {
+            printf("[pc] native: no effect id left for %s\n", d.key.c_str());
+            continue;
+        }
+        MobEffect* e = (MobEffect*)MakeNamed(d);
+        if (e == 0)
+        {
+            printf("[pc] native: %s made no effect\n", d.key.c_str());
+            continue;
+        }
+        int id = EFFECT_ID_FIRST + slot;
+        e->setDescriptionId(PcModContentAddName(d.display.c_str()));
+        MobEffect::mobEffectRegistry->registerMapping(id, ResourceLocation(Widen(d.mod), Widen(d.name)), e);
+        if (id > top)
+            top = id;
+        n++;
+    }
+    if (n > 0)
+    {
+        printf("[pc] native: %d mod effects\n", n);
+        fflush(stdout);
+    }
+    return top;
+}
+
+bool PcModHooksIsModEffect(int id)
+{
+    return id >= EFFECT_ID_FIRST;
+}
+
+void PcModHooksAddEnchantments()
+{
+    PcNativeModsRegister();
+    enchantsDone = true;
+    std::sort(enchants.begin(), enchants.end(), NamedByKey);
+    int n = 0;
+    for (size_t i = 0; i < enchants.size(); i++)
+    {
+        NamedDef& d = enchants[i];
+        int slot = (int)(Hash(d.key) % (unsigned int)ENCHANT_ID_COUNT);
+        int tries = 0;
+        while (Enchantment::enchantmentRegistry->containsId(ENCHANT_ID_FIRST + slot) && tries < ENCHANT_ID_COUNT)
+        {
+            slot = (slot + 1) % ENCHANT_ID_COUNT;
+            tries++;
+        }
+        if (tries >= ENCHANT_ID_COUNT)
+        {
+            printf("[pc] native: no enchantment id left for %s\n", d.key.c_str());
+            continue;
+        }
+        Enchantment* e = (Enchantment*)MakeNamed(d);
+        if (e == 0)
+        {
+            printf("[pc] native: %s made no enchantment\n", d.key.c_str());
+            continue;
+        }
+        e->setDescriptionId(PcModContentAddName(d.display.c_str()));
+        Enchantment::enchantmentRegistry->registerMapping(ENCHANT_ID_FIRST + slot,
+                                                          ResourceLocation(Widen(d.mod), Widen(d.name)), e);
+        n++;
+    }
+    if (n > 0)
+    {
+        printf("[pc] native: %d mod enchantments\n", n);
+        fflush(stdout);
+    }
 }
 
 void PcModHooksAddRenderers(EntityRenderDispatcher* dispatcher)

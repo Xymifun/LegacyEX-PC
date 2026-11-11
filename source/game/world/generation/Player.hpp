@@ -37,7 +37,6 @@ class ItemEntity;
 class Merchant;
 class MultiPlayerGameMode;
 
-
 class Achievement;
 class Block;
 class BlockPos;
@@ -64,17 +63,23 @@ struct sp_Entity;
 struct sp_LivingEntity;
 struct sp_Player;
 
-
 enum EDefaultSkins
 {
     eDefaultSkins_ServerSelected = 0,
     eDefaultSkins_Skin0 = 1
 };
 
+#ifdef MINECRAFT_PC
+#include "platform/pc/PcModStorage.hpp"
+#endif
+
 class Player : public LivingEntity
 {
 public:
     friend class MultiPlayerGameMode;
+#ifdef MINECRAFT_PC
+    PcModData mModData;
+#endif
     friend class ServerGamePacketListenerImpl;
 
     enum EPlayerGamePrivileges
@@ -107,7 +112,6 @@ public:
     static const EntityDataAccessor<CompoundTag*>* DATA_SHOULDER_RIGHT;
     static std::vector<unsigned int> sDlcSkinIds;
 
-
     class ChatVisiblity
     {
     public:
@@ -119,7 +123,6 @@ public:
     private:
         int mId;
     };
-
 
     enum TimerAchievements
     {
@@ -146,7 +149,6 @@ public:
     private:
         boost::shared_ptr<Player> mPlayer;
     };
-
 
     boost::shared_ptr<Inventory> mInventory;
     boost::shared_ptr<PlayerEnderChestContainer> mEnderChestInventory;
@@ -247,10 +249,8 @@ public:
     bool mTimerAchievementAwarded[2];
     int32_t mTimerAchievementTicks[2];
 
-
     Player(Level* level, const std::wstring& name);
     ~Player();
-
 
     std::wstring getDisplayName();
     bool isSendMessageEnabled();
@@ -522,6 +522,5 @@ public:
     double GetCollisionSize();
     void AdvanceAllTimerAchievements(int amount);
 };
-
 
 #endif

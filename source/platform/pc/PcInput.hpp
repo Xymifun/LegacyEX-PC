@@ -89,6 +89,8 @@ void PcInputCancelKeyCapture();
 bool PcInputKeyCapturing();
 int PcInputTakeKeyCapture();
 bool PcInputKeyHeld(int key);
+bool PcInputModKeyHeld(int action);
+int PcInputModKeyPresses(int action);
 void PcInputSetDirectLook(bool direct);
 void PcInputConsumeMouseDelta(float* x, float* y);
 void PcInputSetLogging(bool log);

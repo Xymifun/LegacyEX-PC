@@ -2563,6 +2563,9 @@ void Player::readAdditionalSaveData(CompoundTag* tag)
 
     mInventory->load(tag->getList(L"Inventory", Tag::TAG_COMPOUND));
     mInventory->m_selected = tag->getInt(L"SelectedItemSlot");
+#ifdef MINECRAFT_PC
+    PcModStorageRead(tag, &mModData);
+#endif
 
     mSleeping = tag->getBoolean(L"Sleeping");
     mSleepCounter = tag->getShort(L"SleepTimer");
@@ -2616,6 +2619,9 @@ void Player::addAdditonalSaveData(CompoundTag* tag)
 
     tag->put(L"Inventory", mInventory->save(new ListTag()));
     tag->putInt(L"SelectedItemSlot", mInventory->m_selected);
+#ifdef MINECRAFT_PC
+    PcModStorageWrite(tag, mModData);
+#endif
 
     tag->putBoolean(L"Sleeping", mSleeping != 0);
     tag->putShort(L"SleepTimer", static_cast<short>(mSleepCounter));

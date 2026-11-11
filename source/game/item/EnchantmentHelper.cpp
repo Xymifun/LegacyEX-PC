@@ -99,6 +99,10 @@ boost::unordered_map<Enchantment*, int>* EnchantmentHelper::getEnchantments(cons
             Enchantment* enchantment = Enchantment::byId(tag->getShort(L"id"));
             int level = tag->getShort(L"lvl");
 
+#ifdef MINECRAFT_PC
+            if (enchantment == NULL)
+                continue;
+#endif
             enchantments->insert(std::make_pair(enchantment, level));
         }
     }

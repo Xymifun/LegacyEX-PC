@@ -2,6 +2,9 @@
 #define GAME_WORLD_THEENDLEVELSOURCE_HPP
 
 #include <string>
+#ifdef MINECRAFT_PC
+#include "platform/pc/PcModStructures.hpp"
+#endif
 #include <vector>
 
 #include "game/core/PerlinNoise.hpp"
@@ -54,6 +57,9 @@ private:
     bool mGenerateStructures;
     BlockPos mOrigin;
     EndCityFeature* mEndCityFeature;
+#ifdef MINECRAFT_PC
+    PcModFeatures* mModStructures;
+#endif
     SimplexNoise* mIslandNoise;
     arrayWithLength<Biome*> mBiomes;
     EndIslandFeature* mEndIslandFeature;

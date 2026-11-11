@@ -69,7 +69,7 @@ struct VoicePreferences
 
 std::map<unsigned long long, VoicePreferences> voicePrefs;
 
-bool ListenerProximity(unsigned long long station, bool local, int* range)
+bool SpeakerProximity(unsigned long long station, bool local, int* range)
 {
     VoicePreferences prefs;
     if (local)
@@ -1540,10 +1540,10 @@ void PcNetworkSession::TickVoice()
             continue;
         }
         packet[0] = (unsigned char)speaker;
+        int range = 0;
+        const bool proximity = SpeakerProximity(m_localStationId, true, &range);
         for (size_t i = 0; i < listeners.size(); ++i)
         {
-            int range = 0;
-            const bool proximity = ListenerProximity(listeners[i].first, false, &range);
             if (!PcVoiceRoute(speaker, listeners[i].second, proximity, range, &packet[1], &packet[2]))
                 continue;
             QueueSend(listeners[i].first, CHANNEL_VOICE, &packet[0], (unsigned int)packet.size());
@@ -1593,12 +1593,11 @@ void PcNetworkSession::HandleVoice(unsigned long long station, const unsigned ch
     std::vector<unsigned char> packet(data, data + len);
     packet[0] = (unsigned char)speaker;
     int range = 0;
-    bool proximity = ListenerProximity(m_localStationId, true, &range);
+    const bool proximity = SpeakerProximity(station, false, &range);
     if (hostListener >= 0 && PcVoiceRoute(speaker, hostListener, proximity, range, &packet[1], &packet[2]))
         PcVoiceReceive(speaker, packet[1], packet[2], data + VOICE_HEADER_SIZE, len - VOICE_HEADER_SIZE);
     for (size_t i = 0; i < listeners.size(); ++i)
     {
-        proximity = ListenerProximity(listeners[i].first, false, &range);
         if (!PcVoiceRoute(speaker, listeners[i].second, proximity, range, &packet[1], &packet[2]))
             continue;
         QueueSend(listeners[i].first, CHANNEL_VOICE, &packet[0], (unsigned int)packet.size());

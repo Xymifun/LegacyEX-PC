@@ -26,6 +26,10 @@
 #include "game/util/ResourceLocation.hpp"
 #include "game/world/Level.hpp"
 
+#ifdef MINECRAFT_PC
+#include "platform/pc/PcModHooks.hpp"
+#endif
+
 MappedRegistry<ResourceLocation, MobEffect*>* MobEffect::mobEffectRegistry =
     new MappedRegistry<ResourceLocation, MobEffect*>();
 static unsigned int effectCount;
@@ -249,6 +253,11 @@ void MobEffect::staticCtor()
                                            ->setDescriptionId(IDS_EFFECT_SLOWFALLING)
                                            ->setIcon(EMobEffectIcon_SlowFalling)
                                            ->setBeneficial());
+#ifdef MINECRAFT_PC
+    int modTop = PcModHooksAddEffects();
+    if (modTop > (int)effectCount)
+        effectCount = modTop;
+#endif
 }
 
 unsigned int MobEffect::GetEffectCount()

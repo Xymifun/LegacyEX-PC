@@ -76,8 +76,10 @@ void PcOsUsePreciseTimers()
     timeBeginPeriod(1);
 }
 
-void PcOsPrepareOutput(bool ownWindow)
+void PcOsPrepareOutput(bool ownWindow, bool keepConsole)
 {
+    if (keepConsole && !ownWindow)
+        return;
     if (ownWindow)
     {
         FreeConsole();

@@ -1008,6 +1008,11 @@ std::map<std::string, int> RuntimeIds()
 }
 }
 
+int PcModContentAddName(const char* text)
+{
+    return AddString(text != 0 ? text : "");
+}
+
 bool PcModContentAddNativeBlock(const std::string& mod, const char* name, const char* displayName, int tab,
                                 void* (*make)(int id))
 {

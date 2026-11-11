@@ -285,6 +285,7 @@ void HostSavedWorld(Minecraft* mc)
         printf("[pc] world: resetting the Nether\n");
     if (g_request.resetEnd)
         printf("[pc] world: resetting the End\n");
+    fflush(stdout);
 
     if (g_request.visibility != 0)
         gApp.SetGameHostOption(eGameHostOption_FriendsOfFriends, g_request.visibility == 2 ? 1 : 0);

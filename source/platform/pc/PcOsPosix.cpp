@@ -64,7 +64,7 @@ void PcOsUsePreciseTimers()
 {
 }
 
-void PcOsPrepareOutput(bool)
+void PcOsPrepareOutput(bool, bool)
 {
 }
 

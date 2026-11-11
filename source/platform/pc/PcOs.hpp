@@ -25,7 +25,7 @@ void PcOsCalendarFromUnixSeconds(long long seconds, bool local, PcOsCalendar* ca
 void PcOsSleepMilliseconds(unsigned int milliseconds);
 bool PcOsRandomBytes(void* buffer, size_t size);
 void PcOsUsePreciseTimers();
-void PcOsPrepareOutput(bool ownWindow);
+void PcOsPrepareOutput(bool ownWindow, bool keepConsole);
 [[noreturn]] void PcOsExitImmediately(int code);
 
 void* PcOsAllocPages(void* address, size_t size);

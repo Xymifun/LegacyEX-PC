@@ -1,4 +1,7 @@
 #include "game/entity/mob/MobEffectInstance.hpp"
+#ifdef MINECRAFT_PC
+#include "platform/pc/PcModHooks.hpp"
+#endif
 
 #include <string>
 #include <vector>
@@ -179,6 +182,10 @@ bool MobEffectInstance::compareTo(const MobEffectInstance* other) const
 CompoundTag* MobEffectInstance::save(CompoundTag* tag)
 {
     tag->putByte(L"Id", (unsigned char)MobEffect::getId(effect));
+#ifdef MINECRAFT_PC
+    if (PcModHooksIsModEffect(MobEffect::getId(effect)))
+        tag->putString(L"PcName", MobEffect::mobEffectRegistry->getKey(effect).toString());
+#endif
     tag->putByte(L"Amplifier", (unsigned char)getAmplifier());
     tag->putInt(L"Duration", getDuration());
     tag->putBoolean(L"Ambient", isAmbient());
@@ -190,6 +197,10 @@ MobEffectInstance* MobEffectInstance::load(CompoundTag* tag)
 {
     unsigned char id = tag->getByte(L"Id");
     MobEffect* effect = MobEffect::byId(id);
+#ifdef MINECRAFT_PC
+    if (tag->contains(L"PcName", Tag::TAG_STRING))
+        effect = MobEffect::byName(tag->getString(L"PcName"));
+#endif
     if (effect == NULL)
     {
         return NULL;

@@ -10,7 +10,8 @@ set(SOURCE_ROOT "${REPO_ROOT}/source")
 add_compile_options("-fmacro-prefix-map=${REPO_ROOT}/=")
 set(DEPS "${REPO_ROOT}/build/deps" CACHE PATH "Directory tools/build/deps.py fills")
 
-foreach(required boost/boost/shared_ptr.hpp zlib/zlib.h libpng/png.c stb/stb_image.h curl/include/curl/curl.h lua/lua.h opus/include/opus.h)
+foreach(required boost/boost/shared_ptr.hpp zlib/zlib.h libpng/png.c stb/stb_image.h curl/include/curl/curl.h lua/lua.h opus/include/opus.h
+        stb_vorbis/stb_vorbis.c dr_mp3/dr_mp3.h)
     if(NOT EXISTS "${DEPS}/${required}")
         message(FATAL_ERROR "${DEPS}/${required} is missing; run: python tools/build/deps.py build/deps")
     endif()
@@ -86,6 +87,10 @@ target_include_directories(pc_opus PRIVATE "${DEPS}/opus" "${DEPS}/opus/celt" "$
 target_compile_definitions(pc_opus PRIVATE OPUS_BUILD USE_ALLOCA HAVE_LRINT HAVE_LRINTF)
 target_compile_options(pc_opus PRIVATE -w -O2)
 
+add_library(pc_audio_decoders STATIC "${SOURCE_ROOT}/platform/pc/PcAudioDecoders.c")
+target_include_directories(pc_audio_decoders PUBLIC "${DEPS}/stb_vorbis" "${DEPS}/dr_mp3")
+target_compile_options(pc_audio_decoders PRIVATE -w -O2)
+
 add_library(pc_game_flags INTERFACE)
 target_include_directories(pc_game_flags INTERFACE
     "${SOURCE_ROOT}/platform/pc/overlay"
@@ -132,6 +137,17 @@ target_compile_definitions(pc_game_flags INTERFACE
 target_compile_options(pc_game_flags INTERFACE
     $<$<COMPILE_LANGUAGE:CXX>:-fshort-wchar -frtti -fno-exceptions -fno-threadsafe-statics -Wno-c++11-narrowing
     -fno-delete-null-pointer-checks>)
+get_target_property(abi_defs pc_game_flags INTERFACE_COMPILE_DEFINITIONS)
+get_target_property(abi_opts pc_game_flags INTERFACE_COMPILE_OPTIONS)
+file(READ "${REPO_ROOT}/tools/build/deps.json" deps_json)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${REPO_ROOT}/tools/build/deps.json")
+set(abi_text "${PC_64BIT};${PC_WUT_TYPES};${abi_defs};${abi_opts}")
+foreach(dep boost wut curl zlib libpng stb_image lua)
+    string(JSON tree ERROR_VARIABLE err GET "${deps_json}" ${dep} tree_sha256)
+    string(APPEND abi_text ";${dep}=${tree}")
+endforeach()
+string(SHA256 PC_ABI_FLAGS "${abi_text}")
+string(SUBSTRING "${PC_ABI_FLAGS}" 0 16 PC_ABI_FLAGS)
 if(NOT PC_POINTER_WARNINGS)
     target_compile_options(pc_game_flags INTERFACE $<$<COMPILE_LANGUAGE:CXX>:-w>)
 else()
@@ -143,6 +159,8 @@ file(GLOB_RECURSE GAME_SOURCES CONFIGURE_DEPENDS "${SOURCE_ROOT}/game/*.cpp")
 list(REMOVE_ITEM GAME_SOURCES "${SOURCE_ROOT}/game/core/PIXNamedEvents.cpp")
 add_library(mcgame STATIC ${GAME_SOURCES})
 target_link_libraries(mcgame PUBLIC pc_game_flags pc_png pc_zlib)
+set(PC_HOOK_FLAG -fpatchable-function-entry=5)
+target_compile_options(mcgame PRIVATE ${PC_HOOK_FLAG})
 
 set(PC_SHARED_UNITS
     vendor/_ConnectionProgressParams vendor/_LoadingInputParams vendor/_MapDataMappings vendor/_MapDataMappings_old
@@ -167,6 +185,7 @@ endforeach()
 
 file(GLOB PC_PLATFORM_SOURCES CONFIGURE_DEPENDS "${SOURCE_ROOT}/platform/pc/*.cpp")
 add_executable(MinecraftPC ${PC_PLATFORM_SOURCES} ${PC_SHARED_SOURCES})
+target_compile_options(MinecraftPC PRIVATE ${PC_HOOK_FLAG})
 file(GLOB PC_KEYBOARD_GLYPHS CONFIGURE_DEPENDS "${SOURCE_ROOT}/platform/pc/glyphs/keyboard/*.png")
 set(PC_KEYBOARD_GLYPH_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/PcKeyboardGlyphData.cpp")
 add_custom_command(OUTPUT "${PC_KEYBOARD_GLYPH_SOURCE}"
@@ -183,13 +202,14 @@ set(PC_NATIVE_SDK_DIR "${CMAKE_CURRENT_BINARY_DIR}/native-sdk")
 file(MAKE_DIRECTORY "${PC_NATIVE_SDK_DIR}")
 add_custom_command(OUTPUT "${PC_CONTENT_VERSION_SOURCE}" "${PC_NATIVE_SDK_DIR}/PcGameBuild.h"
     COMMAND "${CMAKE_COMMAND}" "-DROOT=${SOURCE_ROOT}" "-DOUTPUT=${PC_CONTENT_VERSION_SOURCE}"
-            "-DHEADER=${PC_NATIVE_SDK_DIR}/PcGameBuild.h"
+            "-DHEADER=${PC_NATIVE_SDK_DIR}/PcGameBuild.h" "-DABIFLAGS=${PC_ABI_FLAGS}"
             -P "${CMAKE_CURRENT_SOURCE_DIR}/content-version.cmake"
     DEPENDS ${PC_CONTENT_FILES} "${CMAKE_CURRENT_SOURCE_DIR}/content-version.cmake"
+            "${CMAKE_CURRENT_SOURCE_DIR}/header-hash.cmake"
     VERBATIM)
 target_sources(MinecraftPC PRIVATE "${PC_CONTENT_VERSION_SOURCE}")
-target_link_libraries(MinecraftPC PRIVATE pc_game_flags -Wl,--whole-archive mcgame -Wl,--no-whole-archive pc_png pc_zlib pc_lua pc_opus)
-target_link_options(MinecraftPC PRIVATE -fuse-ld=lld -Wl,--gc-sections -Wl,--error-limit=0)
+target_link_libraries(MinecraftPC PRIVATE pc_game_flags -Wl,--whole-archive mcgame -Wl,--no-whole-archive pc_png pc_zlib pc_lua pc_opus pc_audio_decoders)
+target_link_options(MinecraftPC PRIVATE -fuse-ld=lld -Wl,--no-gc-sections -Wl,--error-limit=0)
 if(WIN32)
     target_sources(MinecraftPC PRIVATE "${SOURCE_ROOT}/vendor/dlmalloc.cpp")
     enable_language(RC)
@@ -228,6 +248,7 @@ if(WIN32 AND PC_64BIT)
         DEPENDS MinecraftPC "${CMAKE_CURRENT_SOURCE_DIR}/native-sdk.cmake"
         VERBATIM)
     add_custom_target(pc_native_sdk DEPENDS "${PC_NATIVE_SDK_DIR}/libpcgame.a")
+    set(PC_TOOLS_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 
     function(pc_add_native_mod target)
         add_library(${target} SHARED EXCLUDE_FROM_ALL ${ARGN})
@@ -238,6 +259,15 @@ if(WIN32 AND PC_64BIT)
                               ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/native-imports/${target}")
         target_link_options(${target} PRIVATE -fuse-ld=lld -static -Wl,--image-base=0x30000000
             -Wl,--disable-high-entropy-va)
+        set(abi "${CMAKE_CURRENT_BINARY_DIR}/${target}-abi.cpp")
+        add_custom_target(${target}_abi
+            COMMAND "${CMAKE_COMMAND}" "-DROOT=${SOURCE_ROOT}" "-DMODDIR=$<TARGET_PROPERTY:${target},SOURCE_DIR>"
+                    "-DSOURCES=$<JOIN:$<TARGET_PROPERTY:${target},SOURCES>,|>" "-DFLAGS=${PC_ABI_FLAGS}"
+                    "-DOUT=${abi}" -P "${PC_TOOLS_DIR}/native-abi.cmake"
+            BYPRODUCTS "${abi}"
+            VERBATIM)
+        add_dependencies(${target} ${target}_abi)
+        target_sources(${target} PRIVATE "${abi}")
     endfunction()
 
     pc_add_native_mod(pc_native_example "${CMAKE_CURRENT_SOURCE_DIR}/native-example/ExampleMod.cpp")

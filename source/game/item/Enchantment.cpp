@@ -44,6 +44,9 @@
 #include "game/world/block/IdMapper.hpp"
 #include "game/world/block/MappedRegistry.hpp"
 #include "game/core/StringFormat.hpp"
+#ifdef MINECRAFT_PC
+#include "platform/pc/PcModHooks.hpp"
+#endif
 
 MappedRegistry<ResourceLocation, Enchantment*, boost::hash<ResourceLocation>, std::equal_to<ResourceLocation>,
                boost::hash<Enchantment*>, std::equal_to<Enchantment*> >* Enchantment::enchantmentRegistry =
@@ -297,4 +300,7 @@ void Enchantment::staticCtor()
                                          new TridentLoyaltyEnchantment(Rarity::COMMON, mainHandSlots));
     enchantmentRegistry->registerMapping(83, ResourceLocation(L"channeling"),
                                          new TridentChannelingEnchantment(Rarity::EPIC, mainHandSlots));
+#ifdef MINECRAFT_PC
+    PcModHooksAddEnchantments();
+#endif
 }

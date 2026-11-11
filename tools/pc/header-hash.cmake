@@ -1,0 +1,7 @@
+function(header_hash file out)
+    file(READ "${file}" text)
+    string(REGEX REPLACE "[ \t\r\n]+" "" text "${text}")
+    string(SHA256 hash "${text}")
+    string(SUBSTRING "${hash}" 0 16 hash)
+    set(${out} "${hash}" PARENT_SCOPE)
+endfunction()

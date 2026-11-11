@@ -41,6 +41,22 @@
     "license": "public domain or MIT",
     "tree_sha256": "dc33c28a6a1bcbdd5f2c52a719cdfe6a99ebb46992e9822031e076bd5642b104"
   },
+  "stb_vorbis": {
+    "url": "https://raw.githubusercontent.com/nothings/stb/4e9b368bfc071e97206ea5c6adba68dd0cbf8897/stb_vorbis.c",
+    "kind": "file",
+    "dest": "stb_vorbis",
+    "version": "1.22 (4e9b368)",
+    "license": "public domain or MIT",
+    "tree_sha256": "63084af8d40c39f6ecb299c5db17e5f6e298189949e00b4222167860e1f72397"
+  },
+  "dr_mp3": {
+    "url": "https://raw.githubusercontent.com/mackron/dr_libs/aec2dd20667f54acfdb66031217df6d240f56c52/dr_mp3.h",
+    "kind": "file",
+    "dest": "dr_mp3",
+    "version": "0.7.4 (aec2dd2)",
+    "license": "public domain or MIT-0",
+    "tree_sha256": "81c816c74f4c753fd8c77eb6cc971d6792f8d46f4b14bdda97894ded7388879a"
+  },
   "wut": {
     "url": "https://codeload.github.com/Jacobwasbeast/wut/tar.gz/31d8e6a396278b6eb6195b9c2abf1ad6250d16ae",
     "strip": "wut-31d8e6a396278b6eb6195b9c2abf1ad6250d16ae",

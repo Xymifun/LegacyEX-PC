@@ -1,4 +1,7 @@
 #include "game/world/TheEndLevelSource.hpp"
+#ifdef MINECRAFT_PC
+#include "platform/pc/PcModStructures.hpp"
+#endif
 
 #include <cmath>
 
@@ -26,6 +29,9 @@ TheEndLevelSource::TheEndLevelSource(Level* level, bool generateStructures, long
 {
     mLevelSize = 128;
     mEndCityFeature = new EndCityFeature(this);
+#ifdef MINECRAFT_PC
+    mModStructures = PcModStructuresMake(level, 1, this);
+#endif
     mRandom = new Random(seed);
     mPopulationRandom = new Random(seed);
     mNoise1 = new PerlinNoise(mRandom, 16);
@@ -43,6 +49,9 @@ TheEndLevelSource::TheEndLevelSource(Level* level, bool generateStructures, long
 TheEndLevelSource::~TheEndLevelSource()
 {
     delete mEndCityFeature;
+#ifdef MINECRAFT_PC
+    PcModStructuresFree(mModStructures);
+#endif
     delete mRandom;
     delete mPopulationRandom;
     delete mNoise1;
@@ -329,6 +338,9 @@ LevelChunk* TheEndLevelSource::createChunk(int chunkX, int chunkZ)
     if (mGenerateStructures)
     {
         mEndCityFeature->apply(mLevel, chunkX, chunkZ, &primer);
+#ifdef MINECRAFT_PC
+        PcModStructuresApply(mModStructures, mLevel, chunkX, chunkZ, &primer);
+#endif
     }
 
     LevelChunk* chunk = new LevelChunk(mLevel, &primer, chunkX, chunkZ);
@@ -355,6 +367,9 @@ void TheEndLevelSource::postProcess(int chunkX, int chunkZ)
     {
         ChunkPos chunkPos(chunkX, chunkZ);
         mEndCityFeature->postProcess(mLevel, *mPopulationRandom, &chunkPos);
+#ifdef MINECRAFT_PC
+        PcModStructuresPostProcess(mModStructures, mLevel, *mPopulationRandom, &chunkPos);
+#endif
     }
     mLevel->getBiome(origin.offset(16, 0, 16))->decorate(mLevel, *mPopulationRandom, origin);
 
@@ -406,6 +421,12 @@ bool TheEndLevelSource::postProcessLoadedChunk(LevelChunk*, int, int)
 
 std::vector<Biome::MobSpawnerData*>* TheEndLevelSource::getMobsAt(MobCategory* category, const BlockPos& pos)
 {
+#ifdef MINECRAFT_PC
+    std::vector<Biome::MobSpawnerData*>* modMobs =
+        mGenerateStructures ? PcModStructuresMobs(mModStructures, category, pos) : NULL;
+    if (modMobs != NULL)
+        return modMobs;
+#endif
     return mLevel->getBiome(pos)->getMobs(category);
 }
 
@@ -416,11 +437,19 @@ BlockPos* TheEndLevelSource::findNearestMapFeature(Level* level, const std::wstr
     {
         return mEndCityFeature->getNearestGeneratedFeature(level, pos, findUnexplored);
     }
+#ifdef MINECRAFT_PC
+    if (StructureFeature* modFeature = PcModStructuresFind(mModStructures, feature))
+        return modFeature->getNearestGeneratedFeature(level, pos, findUnexplored);
+#endif
     return NULL;
 }
 
-void TheEndLevelSource::recreateLogicStructuresForChunk(LevelChunk*, int, int)
+void TheEndLevelSource::recreateLogicStructuresForChunk(LevelChunk*, int chunkX, int chunkZ)
 {
+#ifdef MINECRAFT_PC
+    if (mGenerateStructures)
+        PcModStructuresApply(mModStructures, mLevel, chunkX, chunkZ, NULL);
+#endif
 }
 
 bool TheEndLevelSource::isPosInFeature(Level*, const std::wstring& feature, const BlockPos& pos)
@@ -429,5 +458,9 @@ bool TheEndLevelSource::isPosInFeature(Level*, const std::wstring& feature, cons
     {
         return mEndCityFeature->isInsideFeature(pos);
     }
+#ifdef MINECRAFT_PC
+    if (StructureFeature* modFeature = PcModStructuresFind(mModStructures, feature))
+        return modFeature->isInsideFeature(pos);
+#endif
     return false;
 }
