@@ -194,7 +194,11 @@ ChunkPos* TheEndDimension::closestAreaToPoint(int x, int z)
 
 AABB* TheEndDimension::getPlayerConstraints(const BlockPos& pos)
 {
+#ifdef MINECRAFT_PC
+    if (mModernEnd && areaCount <= 2)
+#else
     if (mModernEnd)
+#endif
     {
         BlockPos origin = closestAreaToPoint(pos.x >> 4, pos.z >> 4)->getWorldPosition();
         return AABB::newTemp(-96.0, -std::numeric_limits<double>::max(), -96.0, 96.0,
@@ -209,7 +213,11 @@ AABB* TheEndDimension::getPlayerConstraints(const BlockPos& pos)
 bool TheEndDimension::containsChunk(int x, int z)
 {
     bool result = Dimension::containsChunk(x, z);
+#ifdef MINECRAFT_PC
+    if (result && mModernEnd && areaCount <= 2)
+#else
     if (result && mModernEnd)
+#endif
     {
         const int size = getXZSize();
         char& cached = mChunkData[(x + size / 2) * size + (z + size / 2)];
