@@ -24,6 +24,8 @@
 #include "game/core/GhostController.hpp"
 #ifdef MINECRAFT_PC
 #include "platform/pc/PcModViews.hpp"
+#include "platform/pc/PcNativeMod.h"
+#include "platform/pc/PcNativeMods.hpp"
 #include "platform/pc/PcGlide.hpp"
 #include "platform/pc/PcSettings.hpp"
 #endif
@@ -866,7 +868,7 @@ void UIScene_HUD::SetRoundNumber(unsigned int round, unsigned int total, bool vi
 void UIScene_HUD::ShowCrosshair(bool visible)
 {
 #ifdef MINECRAFT_PC
-    if (PcModViewsHideCrosshair())
+    if (PcNativeModsHudHidden(PC_NATIVE_HUD_CROSSHAIR))
         visible = false;
 #endif
     if (getFJ_Hud() != 0)

@@ -1,6 +1,7 @@
 #include "platform/pc/PcNativeMods.hpp"
 #include "platform/pc/PcFunctionHooks.hpp"
 #include "platform/pc/PcModHooks.hpp"
+#include "platform/pc/PcModViews.hpp"
 #include "platform/pc/PcModStorage.hpp"
 #include "platform/pc/PcModStructures.hpp"
 #include "platform/pc/PcModSounds.hpp"
@@ -11,9 +12,13 @@
 #include "platform/pc/PcScripts.hpp"
 
 #include "game/core/Minecraft.hpp"
+#include "game/core/BufferedImage.hpp"
+#include "game/client/render/C4JRender.hpp"
 #include "game/client/render/Font.hpp"
+#include "game/client/render/Textures.hpp"
 #include "platform/pc/PcNativeMod.h"
 
+#include <stddef.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -33,6 +38,17 @@
 extern const char kPcContentVersion[];
 extern const char kPcAbiFlags[];
 extern const char kPcHeaderHashes[];
+
+#if defined(_WIN64)
+static_assert(offsetof(PcNativeViews, parts) == 38908, "PcNativeViews: a field before parts moved");
+static_assert(sizeof(PcNativeViewArm) == 68, "PcNativeViewArm changed size (it is in an array)");
+static_assert(sizeof(PcNativeView) == 92, "PcNativeView changed size (it is in an array)");
+static_assert(sizeof(PcNativeViewPart) == 84, "PcNativeViewPart changed size (it is in an array)");
+static_assert(sizeof(PcNativeViewBox) == 84, "PcNativeViewBox changed size (it is in an array)");
+static_assert(sizeof(PcNativeViewItem) == 72, "PcNativeViewItem changed size (it is in an array)");
+static_assert(sizeof(PcNativeViewText) == 120, "PcNativeViewText changed size (it is in an array)");
+static_assert(sizeof(PcNativePad) == 36, "PcNativePad changed size");
+#endif
 
 namespace
 {
@@ -56,6 +72,7 @@ struct NativeMod
     void* dll;
     bool started;
     bool failed;
+    int hudHidden;
 };
 
 std::vector<NativeMod*> nativeMods;
@@ -75,6 +92,8 @@ std::vector<ViewCallback> viewFrameCallbacks;
 std::vector<Callback> hudCallbacks;
 std::vector<PcScriptHudItem>* hudItems = 0;
 std::vector<ViewCallback> viewDoneCallbacks;
+std::vector<ViewCallback> viewDrawCallbacks;
+std::map<std::string, int> modTextures;
 thread_local size_t currentMod = (size_t)(-1);
 
 const char* CurrentId()
@@ -105,6 +124,78 @@ void Log(const char* msg)
     size_t m = ModFor(__builtin_return_address(0));
     printf("[pc] native %s: %s\n", m < nativeMods.size() ? nativeMods[m]->id.c_str() : "?", msg != 0 ? msg : "");
     fflush(stdout);
+}
+
+void NotBoth(const char* what, const char* name)
+{
+    printf("[pc] native %s: %s \"%s\" not added: only a mod with \"side\": \"both\" in its mod.json can add "
+           "one (every player's game needs it)\n", PcNativeModsCurrentId(), what, name != 0 ? name : "");
+    fflush(stdout);
+}
+
+void NoBlock(const char* name, const char*, int, PcNativeMakeBlock)
+{
+    NotBoth("block", name);
+}
+
+void NoItem(const char* name, const char*, int, PcNativeMakeItem)
+{
+    NotBoth("item", name);
+}
+
+unsigned long long NoBlockEntity(const char* name, unsigned long long, PcNativeMakeBlockEntity)
+{
+    NotBoth("block entity", name);
+    return 0;
+}
+
+unsigned long long NoEntity(const char* name, unsigned long long, PcNativeMakeEntity)
+{
+    NotBoth("entity", name);
+    return 0;
+}
+
+int NoEffect(const char* name, const char*, PcNativeMakeEffect)
+{
+    NotBoth("effect", name);
+    return 0;
+}
+
+int NoEnchantment(const char* name, const char*, PcNativeMakeEnchantment)
+{
+    NotBoth("enchantment", name);
+    return 0;
+}
+
+int NoStructure(const char* name, int, PcNativeMakeStructure, PcNativeStructureMobs)
+{
+    NotBoth("structure", name);
+    return 0;
+}
+
+unsigned int NoStructureStart(const char* name, PcNativeMakeStructureStart)
+{
+    NotBoth("structure start", name);
+    return 0;
+}
+
+unsigned int NoStructurePiece(const char* name, PcNativeMakeStructurePiece)
+{
+    NotBoth("structure piece", name);
+    return 0;
+}
+
+void* NoSound(const char* name, const char*, float)
+{
+    NotBoth("sound", name);
+    return 0;
+}
+
+void HideHud(int parts)
+{
+    size_t m = ModFor(__builtin_return_address(0));
+    if (m < nativeMods.size())
+        nativeMods[m]->hudHidden = parts & (PC_NATIVE_HUD_CROSSHAIR | PC_NATIVE_HUD_HINTS);
 }
 
 void Add(std::vector<Callback>* list, PcNativeCallback fn, void* user)
@@ -269,6 +360,47 @@ void OnViewFrame(PcNativeViewCallback fn, void* user)
 void OnViewDone(PcNativeViewCallback fn, void* user)
 {
     AddView(&viewDoneCallbacks, fn, user);
+}
+
+void OnViewDraw(PcNativeViewCallback fn, void* user)
+{
+    AddView(&viewDrawCallbacks, fn, user);
+}
+
+int LoadTexture(const char* file)
+{
+    size_t m = ModFor(__builtin_return_address(0));
+    if (m >= nativeMods.size() || file == 0 || file[0] == 0 || strstr(file, "..") != 0 || file[0] == '/'
+        || file[0] == '\\' || strchr(file, ':') != 0)
+        return 0;
+    std::string key = nativeMods[m]->id + "/" + file;
+    std::map<std::string, int>::iterator it = modTextures.find(key);
+    if (it != modTextures.end())
+        return it->second;
+    int tex = 0;
+    std::string path = nativeMods[m]->directory + "/textures/" + file;
+    FILE* fp = fopen(path.c_str(), "rb");
+    if (fp != 0)
+    {
+        std::vector<unsigned char> data;
+        unsigned char buf[65536];
+        size_t n;
+        while ((n = fread(buf, 1, sizeof(buf), fp)) > 0 && data.size() < 16 * 1024 * 1024)
+            data.insert(data.end(), buf, buf + n);
+        fclose(fp);
+        BufferedImage* img = data.empty() ? 0 : new BufferedImage(&data[0], (unsigned int)data.size());
+        Minecraft* mc = Minecraft::GetInstance();
+        if (img != 0 && img->getWidth() > 0 && mc != 0 && mc->mTextures != 0)
+            tex = mc->mTextures->getTexture(img, C4JRender::eTextureFormat_RGBA8, false);
+        delete img;
+    }
+    if (tex == 0)
+    {
+        printf("[pc] native %s: texture %s could not be read\n", nativeMods[m]->id.c_str(), path.c_str());
+        fflush(stdout);
+    }
+    modTextures[key] = tex;
+    return tex;
 }
 
 void RunViews(const std::vector<ViewCallback>& list, PcNativeViews* views)
@@ -712,6 +844,7 @@ void StartMod(const PcMod& m)
     nm->dll = 0;
     nm->started = false;
     nm->failed = false;
+    nm->hudHidden = 0;
     nativeMods.push_back(nm);
     const size_t idx = nativeMods.size() - 1;
     const size_t prev = currentMod;
@@ -743,6 +876,19 @@ void StartMod(const PcMod& m)
             PcModStorageFillRegister(&nm->reg);
             PcModStructuresFillRegister(&nm->reg);
             PcModSoundsFillRegister(&nm->reg);
+            if (m.side != "both")
+            {
+                nm->reg.addBlock = NoBlock;
+                nm->reg.addItem = NoItem;
+                nm->reg.addBlockEntity = NoBlockEntity;
+                nm->reg.addEntity = NoEntity;
+                nm->reg.addEffect = NoEffect;
+                nm->reg.addEnchantment = NoEnchantment;
+                nm->reg.addStructure = NoStructure;
+                nm->reg.addStructureStart = NoStructureStart;
+                nm->reg.addStructurePiece = NoStructurePiece;
+                nm->reg.addSound = NoSound;
+            }
             const int rc = reg(&nm->reg);
             if (rc != 0)
             {
@@ -799,6 +945,10 @@ void RunMain(size_t idx)
         host.drawText = DrawText;
         host.textWidth = TextWidth;
         host.setHideMenus = SetHideMenus;
+        host.hideHud = HideHud;
+        host.hudRect = PcModViewsHudRect;
+        host.onViewDraw = OnViewDraw;
+        host.loadTexture = LoadTexture;
         host.sendKey = SendKey;
         host.sendChar = SendChar;
         PcModHooksFillHost(&host);
@@ -1022,4 +1172,22 @@ void PcNativeModsViewFrame(PcNativeViews* views)
 void PcNativeModsViewDone(PcNativeViews* views)
 {
     RunViews(viewDoneCallbacks, views);
+}
+
+bool PcNativeModsWantViewDraw()
+{
+    return !viewDrawCallbacks.empty();
+}
+
+void PcNativeModsViewDraw(PcNativeViews* views)
+{
+    RunViews(viewDrawCallbacks, views);
+}
+
+bool PcNativeModsHudHidden(int part)
+{
+    for (size_t i = 0; i < nativeMods.size(); i++)
+        if (!nativeMods[i]->failed && (nativeMods[i]->hudHidden & part) != 0)
+            return true;
+    return false;
 }

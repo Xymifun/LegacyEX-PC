@@ -11,6 +11,7 @@ void PcNativeModsLoad();
 const char* PcNativeModsIdFor(void* from);
 std::string PcNativeModsDirectoryOf(const char* id);
 const char* PcNativeModsCurrentId();
+bool PcNativeModsHudHidden(int part);
 size_t PcNativeModsCurrent();
 void PcNativeModsSetCurrent(size_t mod);
 
@@ -31,5 +32,7 @@ struct PcNativeViews;
 bool PcNativeModsWantViews();
 void PcNativeModsViewFrame(PcNativeViews* views);
 void PcNativeModsViewDone(PcNativeViews* views);
+bool PcNativeModsWantViewDraw();
+void PcNativeModsViewDraw(PcNativeViews* views);
 
 #endif

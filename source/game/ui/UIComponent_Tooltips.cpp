@@ -2,6 +2,8 @@
 #ifdef MINECRAFT_PC
 #include "platform/pc/PcInput.hpp"
 #include "platform/pc/PcModViews.hpp"
+#include "platform/pc/PcNativeMod.h"
+#include "platform/pc/PcNativeMods.hpp"
 #endif
 
 #include <cstring>
@@ -293,7 +295,7 @@ void UIComponent_Tooltips::render(int width, int height, C4JRender::eViewportTyp
             if (GameSettings::GetGameSettings(m_playerId, eGameSetting_DisplayHUD) == 0)
                 return;
 #ifdef MINECRAFT_PC
-            if (PcModViewsHideHints())
+            if (PcNativeModsHudHidden(PC_NATIVE_HUD_HINTS))
                 return;
 #endif
         }

@@ -7,6 +7,8 @@
 #include "platform/pc/PcNativeMods.hpp"
 
 #include "game/core/CConsoleMinecraftApp.hpp"
+#include "game/core/Minecraft.hpp"
+#include "game/client/render/GameRenderer.hpp"
 #include "game/core/HitResult.hpp"
 #include "game/entity/mob/Entity.hpp"
 #include "game/util/Vec3.hpp"
@@ -51,7 +53,6 @@ const Entity* aimEntity = 0;
 double aimStart[3];
 double aimDir[3];
 float aimHit = 0.0f;
-bool hideCrosshair = false;
 struct HudRect
 {
     float gathered[4];
@@ -60,11 +61,15 @@ struct HudRect
 };
 HudRect hotbarRect;
 HudRect offhandRect;
-bool hideHints = false;
+bool drawFrame = false;
+bool gameViewSet = false;
+float gameFromCamera[16];
 bool lookSet = false;
 float lookForward[3];
 double cameraPos[3];
 float cameraYaw = 0.0f;
+float cameraPitch = 0.0f;
+float cameraHeight = 0.0f;
 
 void KeepHudRect(HudRect* hud)
 {
@@ -146,6 +151,15 @@ void Multiply(const float* a, const float* b, float* product)
         }
     }
     memcpy(product, out, sizeof(out));
+}
+
+const float* FromCamera()
+{
+    if (currentView >= 0)
+        return views.view[currentView].fromCamera;
+    if (gameViewSet && drawFrame)
+        return gameFromCamera;
+    return 0;
 }
 
 void PanelMatrix(int idx, float* matrix, const float* model)
@@ -234,6 +248,7 @@ bool AskMod(bool inWorld)
     {
         memcpy(views.camera, cameraPos, sizeof(cameraPos));
         views.cameraYaw = cameraYaw;
+        views.cameraPitch = cameraPitch;
     }
     views.aimHit = aimHit;
     views.menuOpen = !inWorld || PcInputPointerContext() ? 1 : 0;
@@ -242,15 +257,11 @@ bool AskMod(bool inWorld)
     {
         views.panel.width = panelTarget.width;
         views.panel.height = panelTarget.height;
-        memcpy(views.hudRect, hotbarRect.rect, sizeof(views.hudRect));
-        memcpy(views.hudOffhandRect, offhandRect.rect, sizeof(views.hudOffhandRect));
     }
     PcNeutralGlState();
     PcNativeModsViewFrame(&views);
     PcBindMainTargetAfterCallback();
-    aimSet = inWorld && views.viewCount == 2 && views.aim != 0;
-    hideCrosshair = views.viewCount == 2 && views.hideCrosshair != 0;
-    hideHints = views.viewCount == 2 && views.hideHints != 0;
+    aimSet = inWorld && views.aim != 0;
     if (aimSet)
     {
         memcpy(aimOrigin, views.aimOrigin, sizeof(aimOrigin));
@@ -259,7 +270,10 @@ bool AskMod(bool inWorld)
     lookSet = false;
     if (views.viewCount == 0)
         return false;
-    if (views.viewCount != 2 || !ValidView(views.view[0]) || !ValidView(views.view[1]))
+    bool good = views.viewCount >= 1 && views.viewCount <= 2;
+    for (int i = 0; good && i < views.viewCount; ++i)
+        good = ValidView(views.view[i]);
+    if (!good)
     {
         if (!warned)
             printf("[pc] mod views: ignoring %d views, or a view of a bad size or field of view\n",
@@ -280,7 +294,7 @@ bool AskMod(bool inWorld)
 
 void HandOver()
 {
-    for (int i = 0; i < 2; ++i)
+    for (int i = 0; i < views.viewCount; ++i)
         views.view[i].texture = outputTargets[i].colour;
     PcNeutralGlState();
     PcNativeModsViewDone(&views);
@@ -289,8 +303,6 @@ void HandOver()
 
 void TakePanel()
 {
-    KeepHudRect(&hotbarRect);
-    KeepHudRect(&offhandRect);
     int w = 0;
     int h = 0;
     PcGetRenderSize(&w, &h);
@@ -311,6 +323,8 @@ bool PcModViewsBeginFrame(Entity* camera, float partialTick)
         return false;
     memset(cameraPos, 0, sizeof(cameraPos));
     cameraYaw = 0.0f;
+    cameraPitch = 0.0f;
+    cameraHeight = 0.0f;
     if (camera != 0)
     {
         Vec3* pos = camera->getEyePosition(partialTick);
@@ -318,10 +332,14 @@ bool PcModViewsBeginFrame(Entity* camera, float partialTick)
         cameraPos[0] = pos->x;
         cameraPos[1] = pos->y - camera->getEyeHeight() + eyeHeight;
         cameraPos[2] = pos->z;
+        cameraHeight = (float)(cameraPos[1] - (camera->mYo + (camera->mY - camera->mYo) * partialTick));
         cameraYaw = camera->mYRotO + (camera->mYRot - camera->mYRotO) * partialTick;
+        cameraPitch = camera->mXRotO + (camera->mXRot - camera->mXRotO) * partialTick;
     }
     worldFrame = true;
-    if (!AskMod(true))
+    const bool own = AskMod(true);
+    drawFrame = true;
+    if (!own)
         return false;
     float scale = views.renderScale > 0.0f ? views.renderScale : 1.0f;
     if (scale < 0.1f)
@@ -329,7 +347,7 @@ bool PcModViewsBeginFrame(Entity* camera, float partialTick)
     if (scale > 1.0f)
         scale = 1.0f;
     scaled = scale < 0.999f;
-    for (int i = 0; i < 2; ++i)
+    for (int i = 0; i < views.viewCount; ++i)
     {
         const int w = views.view[i].width;
         const int h = views.view[i].height;
@@ -349,12 +367,12 @@ bool PcModViewsBeginFrame(Entity* camera, float partialTick)
 
 int PcModViewsCount()
 {
-    return active ? 2 : 0;
+    return active ? views.viewCount : 0;
 }
 
 void PcModViewsBeginView(int idx)
 {
-    if (!active || idx < 0 || idx > 1)
+    if (!active || idx < 0 || idx >= views.viewCount)
         return;
     const ViewTarget& t = scaled ? renderTargets[idx] : outputTargets[idx];
     if (PcBeginExternalTarget(t.framebuffer, t.width, t.height))
@@ -388,7 +406,8 @@ void PcModViewsFinishFrame()
     if (panelFrame)
     {
         PcClearMainTarget(0.0f, 0.0f, 0.0f, 0.0f);
-        PcSetWindowUnderlay(outputTargets[0].framebuffer, outputTargets[0].width, outputTargets[0].height);
+        PcSetWindowUnderlay(outputTargets[0].framebuffer, outputTargets[0].width, outputTargets[0].height,
+                            views.windowViewOnly != 0);
     }
     else if (views.keepWindowView == 0)
         PcCopyToMainTarget(outputTargets[0].framebuffer, outputTargets[0].width, outputTargets[0].height);
@@ -397,6 +416,10 @@ void PcModViewsFinishFrame()
 
 void PcModViewsBeforePresent()
 {
+    KeepHudRect(&hotbarRect);
+    KeepHudRect(&offhandRect);
+    drawFrame = false;
+    gameViewSet = false;
     const bool wasWorld = worldFrame;
     const bool wasPanel = panelFrame;
     worldFrame = false;
@@ -411,7 +434,7 @@ void PcModViewsBeforePresent()
     TakePanel();
     if (!panelReady || !AskMod(false) || views.panel.show == 0)
         return;
-    for (int i = 0; i < 2; ++i)
+    for (int i = 0; i < views.viewCount; ++i)
     {
         if (!PrepareTarget(&outputTargets[i], views.view[i].width, views.view[i].height, true, "view image"))
         {
@@ -423,10 +446,21 @@ void PcModViewsBeforePresent()
         PcGl::ColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
         PcGl::ClearColor(MENU_BACKGROUND[0], MENU_BACKGROUND[1], MENU_BACKGROUND[2], 1.0f);
         PcGl::Clear(GL_COLOR_BUFFER_BIT);
+        Minecraft* mc = Minecraft::GetInstance();
+        if (mc != 0 && mc->mGameRenderer != 0 && PcBeginExternalTarget(outputTargets[i].framebuffer, outputTargets[i].width,
+                                                                       outputTargets[i].height))
+        {
+            currentView = i;
+            mc->mGameRenderer->renderModThingsInView();
+            currentView = -1;
+            PcEndExternalTarget();
+        }
         DrawPanel(i, true);
     }
     PcBindMainTargetAfterCallback();
     HandOver();
+    if (views.windowViewOnly != 0)
+        PcSetWindowUnderlay(outputTargets[0].framebuffer, outputTargets[0].width, outputTargets[0].height, true);
 }
 
 void PcModViewsAimBegin(Entity* camera, float partialTick)
@@ -466,11 +500,6 @@ void PcModViewsAimEnd(const HitResult* hit)
     aimEntity = 0;
 }
 
-bool PcModViewsHideCrosshair()
-{
-    return hideCrosshair;
-}
-
 bool PcModViewsAimFor(const Entity* entity, double* pos, double* dir)
 {
     if (entity == 0 || entity != aimEntity)
@@ -480,11 +509,12 @@ bool PcModViewsAimFor(const Entity* entity, double* pos, double* dir)
     return true;
 }
 
-bool PcModViewsHand(int idx, float* viewFromHand)
+bool PcModViewsArm(int idx, float* viewFromArm)
 {
-    if (currentView < 0 || idx < 0 || idx > 1 || views.showArms == 0 || views.handValid[idx] == 0)
+    const float* from = FromCamera();
+    if (from == 0 || idx < 0 || idx > 1 || views.arms[idx].show == 0)
         return false;
-    Multiply(views.view[currentView].fromCamera, views.hands[idx], viewFromHand);
+    Multiply(from, views.arms[idx].model, viewFromArm);
     return true;
 }
 
@@ -516,9 +546,33 @@ void PcModViewsNoteHotbarSlot(int slot, float left, float top, float right, floa
         GatherHudRect(slot == 9 ? &offhandRect : &hotbarRect, left, top, right, bottom);
 }
 
-bool PcModViewsHideHints()
+int PcModViewsHudRect(int part, float* rect)
 {
-    return hideHints;
+    const HudRect* hud = part == PC_NATIVE_HUD_HOTBAR ? &hotbarRect : part == PC_NATIVE_HUD_OFFHAND ? &offhandRect : 0;
+    if (hud == 0 || !(hud->rect[2] > hud->rect[0]))
+    {
+        memset(rect, 0, sizeof(float) * 4);
+        return 0;
+    }
+    memcpy(rect, hud->rect, sizeof(float) * 4);
+    return 1;
+}
+
+bool PcModViewsDrawsInWorld()
+{
+    return currentView >= 0 || (drawFrame && views.inWorld != 0);
+}
+
+void PcModViewsSetGameView(const float* modelView)
+{
+    gameViewSet = false;
+    if (currentView >= 0 || !drawFrame || views.inWorld == 0 || modelView == 0)
+        return;
+    const float yaw = cameraYaw * 0.017453292f;
+    float worldFromCamera[16] = {-cosf(yaw), 0.0f, -sinf(yaw), 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+                                 sinf(yaw), 0.0f, -cosf(yaw), 0.0f, 0.0f, cameraHeight, 0.0f, 1.0f};
+    Multiply(modelView, worldFromCamera, gameFromCamera);
+    gameViewSet = true;
 }
 
 namespace
@@ -563,7 +617,7 @@ bool PcModViewsLookRotation(const Entity* entity, float* yRot, float* xRot)
 
 int PcModViewsBoxCount()
 {
-    if (currentView < 0)
+    if (FromCamera() == 0)
         return 0;
     const int cap = (int)(sizeof(views.boxes) / sizeof(views.boxes[0]));
     return views.boxCount < 0 ? 0 : (views.boxCount > cap ? cap : views.boxCount);
@@ -571,16 +625,16 @@ int PcModViewsBoxCount()
 
 int PcModViewsWorldBox(int idx, float* viewFromBox, float* colour)
 {
-    if (idx < 0 || idx >= PcModViewsBoxCount() || views.boxes[idx].depth == 0)
+    if (idx < 0 || idx >= PcModViewsBoxCount() || (views.boxes[idx].depth == 0 && currentView >= 0))
         return 0;
-    Multiply(views.view[currentView].fromCamera, views.boxes[idx].model, viewFromBox);
+    Multiply(FromCamera(), views.boxes[idx].model, viewFromBox);
     memcpy(colour, views.boxes[idx].colour, sizeof(float) * 4);
-    return views.boxes[idx].depth;
+    return views.boxes[idx].depth == 0 ? 3 : views.boxes[idx].depth;
 }
 
 int PcModViewsTextCount()
 {
-    if (currentView < 0)
+    if (FromCamera() == 0)
         return 0;
     const int cap = (int)(sizeof(views.texts) / sizeof(views.texts[0]));
     return views.textCount < 0 ? 0 : (views.textCount > cap ? cap : views.textCount);
@@ -592,7 +646,7 @@ const char* PcModViewsText(int idx, float* viewFromText, unsigned int* colour, u
         return 0;
     PcNativeViewText& text = views.texts[idx];
     text.text[sizeof(text.text) - 1] = 0;
-    Multiply(views.view[currentView].fromCamera, text.model, viewFromText);
+    Multiply(FromCamera(), text.model, viewFromText);
     *colour = text.colour;
     *background = text.background;
     return text.text;
@@ -600,7 +654,7 @@ const char* PcModViewsText(int idx, float* viewFromText, unsigned int* colour, u
 
 int PcModViewsItemCount()
 {
-    if (currentView < 0)
+    if (FromCamera() == 0)
         return 0;
     const int cap = (int)(sizeof(views.items) / sizeof(views.items[0]));
     return views.itemCount < 0 ? 0 : (views.itemCount > cap ? cap : views.itemCount);
@@ -610,6 +664,17 @@ const void* PcModViewsItem(int idx, float* viewFromItem)
 {
     if (idx < 0 || idx >= PcModViewsItemCount() || views.items[idx].item == 0)
         return 0;
-    Multiply(views.view[currentView].fromCamera, views.items[idx].model, viewFromItem);
+    Multiply(FromCamera(), views.items[idx].model, viewFromItem);
     return views.items[idx].item;
+}
+
+const float* PcModViewsFromCamera()
+{
+    return FromCamera();
+}
+
+void PcModViewsDraw()
+{
+    if (FromCamera() != 0)
+        PcNativeModsViewDraw(&views);
 }

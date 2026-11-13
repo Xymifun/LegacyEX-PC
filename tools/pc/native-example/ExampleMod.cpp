@@ -15,11 +15,13 @@
 // can rebind under Controls, a counter saved with the world and a flag saved with each player, so the
 // gifts come only once. Last, a structure spread over chunks: small stone brick towers, found by name.
 // And a sound of its own: the example key makes the host play a chime at the player, for everyone near
-// them.
+// them. The same key leaves a marker where the player stood: a see-through box with a label, drawn in the
+// world every frame (onViewFrame, without views of its own), and logs where the HUD's hotbar is (hudRect).
 
 #include "PcGameBuild.h"
 #include "platform/pc/PcNativeMod.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 #include <string>
@@ -77,6 +79,8 @@ bool s_rewardsGiven = false;
 int s_statusInterval = 200;
 const SoundEvent* s_chime = 0;
 int s_waveKey = 0;
+bool s_markerSet = false;
+double s_marker[3];
 const char kGiftsReceived = 1;
 
 // A plain cube. Every block class builds its state definition in its constructor (DerivedInit).
@@ -348,6 +352,24 @@ void Frame(void*)
         // Ask the host to chime; it plays the sound for every player near this one (Message).
         Log("the example key was pressed");
         s_host->sendToHost(kMessageChannel, "wave", 4);
+        Minecraft* minecraft = Minecraft::GetInstance();
+        MultiplayerLocalPlayer* player = minecraft != 0 ? minecraft->mLocalPlayers[0].get() : 0;
+        if (player != 0)
+        {
+            // MarkerFrame draws it from now on, half a block above the player's feet
+            s_marker[0] = player->mX;
+            s_marker[1] = player->mY + 0.5;
+            s_marker[2] = player->mZ;
+            s_markerSet = true;
+        }
+        float hotbar[4];
+        if (s_host->hudRect(PC_NATIVE_HUD_HOTBAR, hotbar))
+        {
+            char text[128];
+            snprintf(text, sizeof(text), "the hotbar is drawn from %.2f, %.2f to %.2f, %.2f of the window", hotbar[0],
+                     hotbar[1], hotbar[2], hotbar[3]);
+            Log(text);
+        }
     }
     Minecraft* game = Minecraft::GetInstance();
     if (game != 0 && game->mLocalPlayers[0] != 0)
@@ -372,6 +394,72 @@ void Frame(void*)
     else
         snprintf(text, sizeof(text), "frame %llu: not in a world", s_frames);
     Log(text);
+}
+
+// A direction in the world as camera space sees it (PcNativeViews.cameraYaw: -z along the yaw, x to its right).
+void WorldDirectionToCamera(const PcNativeViews* views, const double* direction, float* out)
+{
+    const double yaw = views->cameraYaw * 0.017453292519943295;
+    const double right[3] = {-cos(yaw), 0.0, -sin(yaw)};
+    const double forward[3] = {-sin(yaw), 0.0, cos(yaw)};
+    out[0] = static_cast<float>(direction[0] * right[0] + direction[2] * right[2]);
+    out[1] = static_cast<float>(direction[1]);
+    out[2] = static_cast<float>(-(direction[0] * forward[0] + direction[2] * forward[2]));
+}
+
+// Each frame: the marker as a box in the world (behind blocks, see-through) and its name above it. Camera
+// space moves with the player, so the marker's world position is turned into it every frame.
+void MarkerFrame(PcNativeViews* views, void*)
+{
+    if (!s_markerSet || views->inWorld == 0)
+        return;
+    const double offset[3] = {s_marker[0] - views->camera[0], s_marker[1] - views->camera[1],
+                              s_marker[2] - views->camera[2]};
+    float centre[3];
+    WorldDirectionToCamera(views, offset, centre);
+
+    // a box half a block wide, lined up with the world's axes
+    const int boxCapacity = static_cast<int>(sizeof(views->boxes) / sizeof(views->boxes[0]));
+    if (views->boxCount < boxCapacity)
+    {
+        PcNativeViewBox& box = views->boxes[views->boxCount++];
+        const double axes[3][3] = {{1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}};
+        memset(box.model, 0, sizeof(box.model));
+        for (int column = 0; column < 3; ++column)
+        {
+            float axis[3];
+            WorldDirectionToCamera(views, axes[column], axis);
+            for (int row = 0; row < 3; ++row)
+                box.model[column * 4 + row] = axis[row] * 0.25f;
+        }
+        for (int row = 0; row < 3; ++row)
+            box.model[12 + row] = centre[row];
+        box.model[15] = 1.0f;
+        box.colour[0] = 0.2f;
+        box.colour[1] = 0.8f;
+        box.colour[2] = 1.0f;
+        box.colour[3] = 0.45f;
+        box.depth = 1;
+    }
+
+    // its name, facing the way the camera faces, a font pixel 2 cm across
+    const int textCapacity = static_cast<int>(sizeof(views->texts) / sizeof(views->texts[0]));
+    if (views->textCount < textCapacity)
+    {
+        PcNativeViewText& label = views->texts[views->textCount++];
+        const float scale = 0.02f;
+        memset(label.model, 0, sizeof(label.model));
+        label.model[0] = scale;
+        label.model[5] = scale;
+        label.model[10] = scale;
+        label.model[12] = centre[0];
+        label.model[13] = centre[1] + 0.5f;
+        label.model[14] = centre[2];
+        label.model[15] = 1.0f;
+        snprintf(label.text, sizeof(label.text), "Example marker");
+        label.colour = 0xFFFFFFFF;
+        label.background = 0x80000000;
+    }
 }
 
 void HostStart(void*)
@@ -530,5 +618,6 @@ PC_NATIVE_MOD_RECORD
     host->onHostStop(HostStop, 0);
     host->onChunkDecorated(ChunkDecorated, 0);
     host->onMessage(Message, 0);
+    host->onViewFrame(MarkerFrame, 0);
     return 0;
 }

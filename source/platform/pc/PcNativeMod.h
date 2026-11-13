@@ -15,7 +15,7 @@
  * from the game too, so memory passes freely between the game and the mod.
  */
 
-#define PC_NATIVE_ABI 1
+#define PC_NATIVE_ABI 2
 #define PC_NATIVE_ENTRY "PcNativeModMain"
 
 #ifdef __cplusplus
@@ -33,10 +33,13 @@ typedef struct PcNativeModRecord
 
 typedef void (*PcNativeCallback)(void* user);
 
-/* Views of the mod's own: the world is drawn from a pair of views (a first and a second, each with its own
- * projection and placement), into images the game owns, instead of once for the window. Matrices are
- * column-major, as OpenGL takes them. Distances are in blocks. "Camera space" is the player's camera
- * before a view's matrix: -z along the player's yaw, y up, in blocks from the player's eyes. */
+/* Drawing in the world and views of the mod's own (onViewFrame, every frame with one local player). A mod can
+ * draw boxes, items, text and the player's arms in the world, and aim along a ray of its own, in the normal
+ * view. It can also have the world drawn from one or two views of its own (each with its own projection and
+ * placement) into images the game owns, instead of once for the window; the menus and HUD then go on a panel
+ * it places. Matrices are column-major, as OpenGL takes them. Distances are in blocks. "Camera space" is the
+ * player's camera turned by its yaw only: -z along the player's yaw, x to its right, y up, in blocks from
+ * the player's eyes. */
 typedef struct PcNativeView
 {
     int width;              /* set by the mod: the view's image in pixels */
@@ -60,8 +63,9 @@ typedef struct PcNativeViewPanel
     int height;             /* for its shape (0 until the first frame) */
 } PcNativeViewPanel;
 
-/* A part of the panel's image on a square of its own (the HUD's hotbar somewhere else), optionally cut out
- * of the panel. Rectangles are left, top, right, bottom as shares of the image's size from its top left. */
+/* A part of the panel's image on a square of its own, optionally cut out of the panel (PcNativeHost's hudRect
+ * says where the HUD's parts are). Rectangles are left, top, right, bottom as shares of the image's size from
+ * its top left. */
 typedef struct PcNativeViewPart
 {
     float source[4];        /* the part of the image to show */
@@ -69,11 +73,10 @@ typedef struct PcNativeViewPart
     int cut;                /* 1: the panel leaves this part of the image out */
 } PcNativeViewPart;
 
-/* A solid box drawn in each view, for markers and pointers: the cube from -1 to 1 into camera space. Boxes
- * hide behind the panel and each other, not behind the world; with depth 1 a box is drawn in the world
- * instead (behind blocks, with the items), its sides shaded, and the panel draws over it; there an alpha
- * below 1 is see-through and drawn in the order given (solid ones first). With depth 2 the same, but every
- * side the same colour (not shaded). */
+/* A solid box, for markers and pointers: the cube from -1 to 1 into camera space. depth 0: drawn over
+ * the world (in the mod's views over the panel too, hidden only by the panel and other boxes); depth 1: in
+ * the world, behind blocks, its sides shaded, and an alpha below 1 is see-through (drawn in the order given,
+ * solid ones first); depth 2: the same, every side one colour. */
 typedef struct PcNativeViewBox
 {
     float model[16];
@@ -81,17 +84,17 @@ typedef struct PcNativeViewBox
     int depth;
 } PcNativeViewBox;
 
-/* An item drawn in each view in the world's depth and light, as an item frame shows it (a block fills
- * about half the square from -1 to 1): model places it in camera space. item points to a
- * boost::shared_ptr<ItemInstance> (not_null_ptr is one) the mod keeps until onViewDone. */
+/* An item in the world's depth and light, as an item frame shows it (a block fills about half the square
+ * from -1 to 1): model places it in camera space. item points to a boost::shared_ptr<ItemInstance>
+ * (not_null_ptr is one) the mod keeps until the frame is drawn (the next onViewFrame). */
 typedef struct PcNativeViewItem
 {
     float model[16];
     const void* item;
 } PcNativeViewItem;
 
-/* Text drawn in each view in the world, after the world boxes: model places it in camera space, its middle at
- * the origin, x to its right and y up, one unit one pixel of the game's font (a line is 8 tall). */
+/* Text in the world, after the world boxes: model places it in camera space, its middle at the origin, x to
+ * its right and y up, one unit one pixel of the game's font (a line is 8 tall). */
 typedef struct PcNativeViewText
 {
     float model[16];
@@ -100,48 +103,57 @@ typedef struct PcNativeViewText
     unsigned int background; /* 0xAARRGGBB, a box behind it; 0 for none */
 } PcNativeViewText;
 
+/* One of the player's arms, with the skin and the item it holds, as the player model has it. */
+typedef struct PcNativeViewArm
+{
+    int show;               /* 1 to draw it */
+    float model[16];        /* in camera space: the hand's end at the origin, the arm reaching back along +z,
+                               -z the way the hand points, y the back of the hand */
+} PcNativeViewArm;
+
 typedef struct PcNativeViews
 {
-    int inWorld;            /* set by the game: 1 in a world, 0 in menus outside one (only the panel is drawn) */
-    int menuOpen;           /* set by the game: 1 while a menu or inventory takes the pointer (also outside a world) */
-    int viewCount;          /* set by the mod: 2 to draw this frame from the two views, 0 (as given) for the
-                               normal view */
+    /* set by the game */
+    int inWorld;            /* 1 in a world, 0 in menus outside one (then only views and their panel are drawn) */
+    int menuOpen;           /* 1 while a menu or inventory takes the pointer (also outside a world) */
+    int textEntry;          /* 1 while a line of text is being typed (chat, a sign, a name) */
+    double camera[3];       /* where camera space's origin is in the world this frame (the camera at the
+                               player's eyes, as drawn); 0 outside a world */
+    float cameraYaw;        /* the yaw (degrees, as Entity::mYRot) camera space's -z faces; a world point w is
+                               at x = (w - camera) . (-cos yaw, 0, -sin yaw), y = w.y - camera.y,
+                               z = -(w - camera) . (-sin yaw, 0, cos yaw) */
+    float cameraPitch;      /* the player's pitch (degrees, as Entity::mXRot; down is positive): the normal
+                               view looks this far below camera space's -z */
+    float aimHit;           /* how far along the aim the last pick hit a block or mob (0: nothing) */
+
+    /* set by the mod: aiming (mining, placing, hitting) along a ray of its own instead of the player's view;
+       used from the next frame */
+    int aim;
+    float aimOrigin[3];     /* in camera space */
+    float aimDirection[3];  /* the same space, length 1 */
+
+    /* set by the mod: things drawn in the world, in its views or else in the normal view */
+    PcNativeViewArm arms[2];    /* 0 the left arm, 1 the right */
+    int boxCount;
+    PcNativeViewBox boxes[192];
+    int itemCount;
+    PcNativeViewItem items[96];
+    int textCount;
+    PcNativeViewText texts[128];
+
+    /* set by the mod: views of its own; viewCount 0 (as given) keeps the normal view */
+    int viewCount;          /* 1 or 2 */
     int showHand;           /* 1: draw the held item in each view, as the normal view does */
-    int keepWindowView;     /* 1: also draw the normal view for the window (a third pass); 0: it shows the first
+    int keepWindowView;     /* 1: also draw the normal view for the window (one more pass); 0: it shows the first
                                view */
     float renderScale;      /* the world is drawn at this share of each view's size, then scaled up to it
                                (0 means 1), for a mod that does not scale a smaller image itself */
-    PcNativeViewPanel panel;
-    int aim;                /* set by the mod: 1 to aim (mine, place, hit) along aimOrigin and aimDirection instead
-                               of the player's view; used from the next frame */
-    float aimOrigin[3];     /* in camera space, in blocks */
-    float aimDirection[3];  /* the same space, length 1 */
-    float aimHit;           /* set by the game: how far along the aim the last pick hit a block or mob (0: nothing) */
-    int hideCrosshair;      /* set by the mod: 1 to hide the HUD's crosshair (it marks the view's centre) */
-    int showArms;           /* set by the mod: 1 to draw the player's arms (with the skin) and held items at hands */
-    int handValid[2];       /* set by the mod: 0 left, 1 right */
-    float hands[2][16];     /* set by the mod: the hands in camera space; -z points forward, the arm's hand end
-                               is at the origin and the arm reaches back along +z */
-    int boxCount;           /* set by the mod: how many of boxes to draw */
-    PcNativeViewBox boxes[192];
     PcNativeView view[2];
-    float hudRect[4];       /* set by the game: the HUD's hotbar slots in the panel's image, as a part's source
-                               (all 0 while the HUD shows no hotbar); hearts, food and experience sit above */
-    int partCount;          /* set by the mod: how many of parts to draw */
+    PcNativeViewPanel panel;
+    int partCount;
     PcNativeViewPart parts[4];
-    float hudOffhandRect[4]; /* set by the game: the HUD's offhand slot, as hudRect (all 0 while not shown) */
-    int hideHints;          /* set by the mod: 1 to hide the button hints (tooltips) while no menu is open */
-    double camera[3];       /* set by the game: where camera space's origin is in the world this frame (the
-                               camera at the player's eyes, as drawn); 0 outside a world */
-    float cameraYaw;        /* set by the game: the yaw (degrees, as Entity::mYRot) camera space's -z faces;
-                               x is to its right and y up, so a world point w is at
-                               x = (w - camera) . (-cos yaw, 0, -sin yaw), y = w.y - camera.y,
-                               z = -(w - camera) . (-sin yaw, 0, cos yaw) */
-    int itemCount;          /* set by the mod: how many of items to draw */
-    PcNativeViewItem items[96];
-    int textEntry;          /* set by the game: 1 while a line of text is being typed (chat, a sign, a name) */
-    int textCount;          /* set by the mod: how many of texts to draw */
-    PcNativeViewText texts[128];
+    int windowViewOnly;     /* 1: the window shows the first view as it is, without the menus and HUD drawn flat
+                               over it (in menus too), as a recording of the views would */
 } PcNativeViews;
 
 typedef void (*PcNativeViewCallback)(PcNativeViews* views, void* user);
@@ -169,6 +181,15 @@ enum
     PC_NATIVE_PAD_RIGHT = 1 << 15,
     PC_NATIVE_PAD_CHAT = 1 << 16,   /* not a GamePad button: opens the chat line, as T does */
     PC_NATIVE_PAD_SNEAK = 1 << 17   /* not a GamePad button: sneaks while held, as Shift does (STICK_R toggles) */
+};
+
+/* parts of the HUD, for hideHud and hudRect */
+enum
+{
+    PC_NATIVE_HUD_CROSSHAIR = 1 << 0,
+    PC_NATIVE_HUD_HINTS = 1 << 1,       /* the button hints (tooltips) shown while no menu is open */
+    PC_NATIVE_HUD_HOTBAR = 1 << 2,      /* the hotbar's nine slots (hearts, food and experience sit above) */
+    PC_NATIVE_HUD_OFFHAND = 1 << 3      /* the offhand slot beside the hotbar */
 };
 
 typedef struct PcNativePad
@@ -240,7 +261,9 @@ enum
 
 /* What the game gives PcNativeModRegister. Names are the mod's own ("copper_lamp"); the game puts the mod's id
    in front ("mymod:copper_lamp"). Blocks and items get ids like content.lua's do, and worlds keep them the same
-   way. Entities and block entities are saved by name, so a world can lose a mod and keep loading. */
+   way. Entities and block entities are saved by name, so a world can lose a mod and keep loading. Only a mod
+   with "side": "both" can add blocks, items, entities, block entities, effects, enchantments, structures and
+   sounds (every player's game needs them); for any other mod those return 0 and log why. */
 typedef struct PcNativeRegister
 {
     unsigned int abi;
@@ -363,10 +386,12 @@ typedef struct PcNativeHost
     void (*onHostTick)(PcNativeCallback callback, void* user);
     void (*onHostStop)(PcNativeCallback callback, void* user);
     /* main thread, each frame before the world is drawn, with one local player in a world: the mod fills in
-     * its views, or leaves viewCount at 0. Outside a world (inWorld 0) it is called before the window's
-     * image is shown, and only the panel is drawn in the views. Not called on a dedicated server. */
+     * what it draws in the world and its views, or leaves viewCount at 0 for the normal view. Outside a world
+     * (inWorld 0) it is called before the window's image is shown, and only the panel is drawn in the views.
+     * Not called on a dedicated server. */
     void (*onViewFrame)(PcNativeViewCallback callback, void* user);
-    /* main thread, after both views were drawn and before the HUD and menus; the view textures are set */
+    /* main thread, after the mod's views were drawn and before the HUD and menus; the view textures are set
+     * (only in frames with views) */
     void (*onViewDone)(PcNativeViewCallback callback, void* user);
     /* main thread, once a frame: the controller's state until the next call (zeroed: no input) */
     void (*setPad)(const PcNativePad* pad);
@@ -397,8 +422,10 @@ typedef struct PcNativeHost
        the thread that made the chunk. */
     void (*onChunkDecorated)(PcNativeChunkCallback callback, void* user);
     /* messages between the mod on the host and on the players' games: channel up to 32 characters, data up to
-       30000 bytes. onMessage gets the sending ServerPlayer on the host, and 0 on a player's game. sendToHost
-       drops the message while the player is not connected to a world (in menus, or while one loads). */
+       30000 bytes. Channels are the mod's own: a message only reaches the same mod on the other side, so two
+       mods can use the same channel name. onMessage gets the sending ServerPlayer on the host, and 0 on a
+       player's game. sendToHost drops the message while the player is not connected to a world (in menus, or
+       while one loads). */
     void (*sendToHost)(const char* channel, const void* data, int size);
     void (*sendToPlayer)(void* serverPlayer, const char* channel, const void* data, int size);  /* 0: everyone */
     void (*onMessage)(PcNativeMessageCallback callback, void* user);
@@ -421,6 +448,22 @@ typedef struct PcNativeHost
        typing); keyPressed is how many times it was pressed during play since the last call. */
     int (*keyDown)(int key);
     int (*keyPressed)(int key);
+    /* main thread: hide parts of the HUD (PC_NATIVE_HUD_CROSSHAIR and _HINTS) until called again; 0 shows them.
+       A part stays hidden while any mod hides it. */
+    void (*hideHud)(int parts);
+    /* main thread: where one part of the HUD (PC_NATIVE_HUD_HOTBAR or _OFFHAND) was drawn last frame, as left,
+       top, right, bottom shares of the window's image from its top left. 0 (and the rect all 0) when it was
+       not drawn. */
+    int (*hudRect)(int part, float* rect);
+    /* main thread: called while the mod's things are drawn in the world, in each of its views and in the
+       normal view (and in its views while only menus show), after its arms and items and before its boxes (so
+       see-through boxes show over what it draws). The modelview is set
+       so that what the mod draws is in camera space, lit as entities are; draw with the game's own classes
+       (ModelPart::render, Tesselator, GlStateManager) and leave the state as it was. */
+    void (*onViewDraw)(PcNativeViewCallback callback, void* user);
+    /* main thread: the mod's textures/FILE (a PNG) as a texture for GlStateManager::bindTexture, loaded once;
+       0 when it can not be read */
+    int (*loadTexture)(const char* file);
 } PcNativeHost;
 
 /* The mod's entry point: 0 when it started; anything else and the game unloads it. */

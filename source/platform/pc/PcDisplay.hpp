@@ -36,7 +36,7 @@ void PcClearDepth(unsigned int framebuffer);
 void PcDrawBoxes(unsigned int framebuffer, int width, int height, const float* matrices, const float* colours,
                  int count);
 void PcCopyMainTargetTo(unsigned int framebuffer);
-void PcSetWindowUnderlay(unsigned int framebuffer, int width, int height);
+void PcSetWindowUnderlay(unsigned int framebuffer, int width, int height, bool alone);
 void PcBindMainTargetAfterCallback();
 void PcMakeFrustumMatrix(float left, float right, float bottom, float top, float nearDistance, float farDistance,
                          float* matrix);

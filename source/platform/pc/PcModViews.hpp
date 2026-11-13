@@ -13,16 +13,19 @@ void PcModViewsBeforePresent();
 class HitResult;
 void PcModViewsAimBegin(Entity* camera, float partialTick);
 void PcModViewsAimEnd(const HitResult* hit);
-bool PcModViewsHideCrosshair();
 bool PcModViewsAimFor(const Entity* entity, double* pos, double* dir);
 bool PcModViewsAimRotation(const Entity* entity, float* yRot, float* xRot);
 bool PcModViewsLookRotation(const Entity* entity, float* yRot, float* xRot);
 
 void PcModViewsNoteHotbarSlot(int slot, float left, float top, float right, float bottom);
-bool PcModViewsHideHints();
+int PcModViewsHudRect(int part, float* rect);
+bool PcModViewsDrawsInWorld();
+void PcModViewsSetGameView(const float* modelView);
+const float* PcModViewsFromCamera();
+void PcModViewsDraw();
 
 bool PcModViewsInView();
-bool PcModViewsHand(int idx, float* viewFromHand);
+bool PcModViewsArm(int idx, float* viewFromArm);
 bool PcModViewsShowHand();
 int PcModViewsItemCount();
 int PcModViewsBoxCount();

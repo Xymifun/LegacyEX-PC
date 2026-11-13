@@ -88,6 +88,7 @@ public:
     void renderItemInHand(float, int);
 #ifdef MINECRAFT_PC
     void renderModHands(float partialTick);
+    void renderModThingsInView();
 #endif
     float getNightVisionScale(boost::shared_ptr<LivingEntity>, float);
     float getUnderWaterVisionScale(const boost::shared_ptr<Player>&, float);

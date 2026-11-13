@@ -121,6 +121,7 @@
 #include "platform/pc/PcDisplay.hpp"
 #include "platform/pc/PcSettings.hpp"
 #include "platform/pc/PcModViews.hpp"
+#include "platform/pc/PcNativeMods.hpp"
 #include "game/core/HumanoidArm.hpp"
 #endif
 #include <cmath>
@@ -3178,7 +3179,7 @@ void GameRenderer::renderEyePass(int eyeIndex, float partialTick, long long, boo
     renderSnowAndRain(partialTick);
     GlStateManager::disableFog();
 #ifdef MINECRAFT_PC
-    if (PcModViewsInView())
+    if (PcModViewsDrawsInWorld())
         renderModHands(partialTick);
     if (!PcModViewsShowHand())
         return;
@@ -3190,38 +3191,66 @@ void GameRenderer::renderEyePass(int eyeIndex, float partialTick, long long, boo
 #ifdef MINECRAFT_PC
 void GameRenderer::renderModHands(float partialTick)
 {
+    if (!PcModViewsInView())
+        PcModViewsSetGameView(gRenderer->MatrixGet(0));
     float hands[2][16];
-    const bool left = PcModViewsHand(0, hands[0]);
-    const bool right = PcModViewsHand(1, hands[1]);
+    const bool left = PcModViewsArm(0, hands[0]);
+    const bool right = PcModViewsArm(1, hands[1]);
     const int items = PcModViewsItemCount();
     const int boxes = PcModViewsBoxCount();
     const int texts = PcModViewsTextCount();
-    if (!left && !right && items == 0 && boxes == 0 && texts == 0)
+    const bool draws = PcNativeModsWantViewDraw() && PcModViewsFromCamera() != 0;
+    if (!left && !right && items == 0 && boxes == 0 && texts == 0 && !draws)
         return;
     boost::shared_ptr<MultiplayerLocalPlayer> player = mMinecraft->mPlayer;
-    if (player == NULL || player->isSpectator() || mMinecraft->mOptions->mHideGui)
+    if (player != NULL && (player->isSpectator() || mMinecraft->mOptions->mHideGui))
         return;
     GlStateManager::enableDepthTest();
     GlStateManager::depthMask(true);
     GlStateManager::matrixMode(0);
-    Lighting::turnOn();
-    turnOnLightLayer(static_cast<double>(partialTick));
-    GlStateManager::enableRescaleNormal();
-    if (left)
-        mItemInHandRenderer->renderModHand(HumanoidArm::LEFT, hands[0]);
-    if (right)
-        mItemInHandRenderer->renderModHand(HumanoidArm::RIGHT, hands[1]);
-    for (int index = 0; index < items; ++index)
+    if (player != NULL)
     {
-        float viewFromItem[16];
-        const void* item = PcModViewsItem(index, viewFromItem);
-        if (item != 0)
-            mItemInHandRenderer->renderModItem(*static_cast<const boost::shared_ptr<ItemInstance>*>(item),
-                                              viewFromItem);
+        Lighting::turnOn();
+        turnOnLightLayer(static_cast<double>(partialTick));
+        GlStateManager::enableRescaleNormal();
+        if (left)
+            mItemInHandRenderer->renderModHand(HumanoidArm::LEFT, hands[0]);
+        if (right)
+            mItemInHandRenderer->renderModHand(HumanoidArm::RIGHT, hands[1]);
+        for (int index = 0; index < items; ++index)
+        {
+            float viewFromItem[16];
+            const void* item = PcModViewsItem(index, viewFromItem);
+            if (item != 0)
+                mItemInHandRenderer->renderModItem(*static_cast<const boost::shared_ptr<ItemInstance>*>(item),
+                                                  viewFromItem);
+        }
+        GlStateManager::disableRescaleNormal();
+        turnOffLightLayer(static_cast<double>(partialTick));
+        Lighting::turnOff();
     }
-    GlStateManager::disableRescaleNormal();
-    turnOffLightLayer(static_cast<double>(partialTick));
-    Lighting::turnOff();
+
+    if (draws)
+    {
+        Lighting::turnOn();
+        if (player != NULL)
+        {
+            turnOnLightLayer(static_cast<double>(partialTick));
+            mItemInHandRenderer->setLightValue(player);
+        }
+        GlStateManager::enableRescaleNormal();
+        GlStateManager::color4f(1.0f, 1.0f, 1.0f, 1.0f);
+        GlStateManager::pushMatrix();
+        GlStateManager::loadIdentity();
+        GlStateManager::glMultMatrixf(const_cast<float*>(PcModViewsFromCamera()));
+        PcModViewsDraw();
+        GlStateManager::popMatrix();
+        GlStateManager::disableRescaleNormal();
+        if (player != NULL)
+            turnOffLightLayer(static_cast<double>(partialTick));
+        Lighting::turnOff();
+        GlStateManager::color4f(1.0f, 1.0f, 1.0f, 1.0f);
+    }
 
     static const float faces[6][4][3] = {
         {{-1, 1, -1}, {-1, 1, 1}, {1, 1, 1}, {1, 1, -1}},     {{-1, -1, 1}, {-1, -1, -1}, {1, -1, -1}, {1, -1, 1}},
@@ -3229,13 +3258,15 @@ void GameRenderer::renderModHands(float partialTick)
         {{-1, -1, -1}, {-1, 1, -1}, {1, 1, -1}, {1, -1, -1}}, {{1, -1, 1}, {1, 1, 1}, {-1, 1, 1}, {-1, -1, 1}}};
     static const float shades[6] = {1.0f, 0.64f, 0.86f, 0.86f, 0.77f, 0.77f};
     bool started = false;
-    for (int index = 0; index < boxes; ++index)
+    for (int index = 0; index < boxes * 2; ++index)
     {
         float viewFromBox[16];
         float colour[4];
-        const int kind = PcModViewsWorldBox(index, viewFromBox, colour);
-        if (kind == 0)
+        const int kind = PcModViewsWorldBox(index % boxes, viewFromBox, colour);
+        if (kind == 0 || (kind == 3) != (index >= boxes))
             continue;
+        if (index >= boxes)
+            GlStateManager::disableDepthTest();
         if (!started)
         {
             GlStateManager::disableTexture();
@@ -3263,6 +3294,7 @@ void GameRenderer::renderModHands(float partialTick)
     }
     if (started)
     {
+        GlStateManager::enableDepthTest();
         GlStateManager::depthMask(true);
         GlStateManager::enableCull();
         GlStateManager::disableBlend();
@@ -3336,6 +3368,29 @@ void GameRenderer::renderModHands(float partialTick)
     GlStateManager::enableCull();
     GlStateManager::disableBlend();
     GlStateManager::color4f(1.0f, 1.0f, 1.0f, 1.0f);
+}
+#endif
+
+#ifdef MINECRAFT_PC
+void GameRenderer::renderModThingsInView()
+{
+    unsigned int scissor[4];
+    gRenderer->StateGetScissorRect(scissor[0], scissor[1], scissor[2], scissor[3]);
+    PcSetWideWorldPass(true);
+    gRenderer->StateSetViewport(C4JRender::eViewportType_FullScreen);
+    gRenderer->StateSetScissorRect(0, 0, 1280, 720);
+    float matrix[16];
+    GlStateManager::matrixMode(1);
+    GlStateManager::loadIdentity();
+    PcModViewsProjection(0.05f, 64.0f, matrix);
+    GlStateManager::glMultMatrixf(matrix);
+    GlStateManager::matrixMode(0);
+    GlStateManager::loadIdentity();
+    GlStateManager::disableFog();
+    GlStateManager::clear(1);
+    renderModHands(0.0f);
+    PcSetWideWorldPass(false);
+    gRenderer->StateSetScissorRect(scissor[0], scissor[1], scissor[2], scissor[3]);
 }
 #endif
 

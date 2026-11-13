@@ -108,6 +108,7 @@ struct MessageHook
     PcNativeMessageCallback fn;
     void* user;
     size_t mod;
+    std::string id;
 };
 
 std::vector<EntityDef> entities;
@@ -342,6 +343,12 @@ void OnChunkDecorated(PcNativeChunkCallback fn, void* user)
     chunkHooks.push_back(h);
 }
 
+std::string CallerId(void* from)
+{
+    const char* id = PcNativeModsIdFor(from);
+    return id != 0 ? id : PcNativeModsCurrentId();
+}
+
 void OnMessage(PcNativeMessageCallback fn, void* user)
 {
     if (fn == 0)
@@ -350,30 +357,33 @@ void OnMessage(PcNativeMessageCallback fn, void* user)
     h.fn = fn;
     h.user = user;
     h.mod = PcNativeModsCurrent();
+    h.id = CallerId(__builtin_return_address(0));
     messageHooks.push_back(h);
 }
 
-arrayWithLength<unsigned char> Pack(const char* channel, const void* data, int size)
+arrayWithLength<unsigned char> Pack(const std::string& id, const char* channel, const void* data, int size)
 {
     int n = channel != 0 ? (int)strlen(channel) : 0;
     if (n < 1 || n > MAX_CHANNEL || size < 0 || size > MAX_MESSAGE || (size > 0 && data == 0))
     {
         printf("[pc] native %s: message on \"%s\" not sent (channel 1 to %d characters, data up to %d bytes)\n",
-               PcNativeModsCurrentId(), channel != 0 ? channel : "", MAX_CHANNEL, MAX_MESSAGE);
+               id.c_str(), channel != 0 ? channel : "", MAX_CHANNEL, MAX_MESSAGE);
         fflush(stdout);
         return arrayWithLength<unsigned char>();
     }
-    arrayWithLength<unsigned char> buf(1 + n + size, true);
-    buf.data[0] = (unsigned char)n;
-    memcpy(buf.data + 1, channel, n);
+    std::string name = id + ":" + channel;
+    int len = (int)name.size();
+    arrayWithLength<unsigned char> buf(1 + len + size, true);
+    buf.data[0] = (unsigned char)len;
+    memcpy(buf.data + 1, name.c_str(), len);
     if (size > 0)
-        memcpy(buf.data + 1 + n, data, size);
+        memcpy(buf.data + 1 + len, data, size);
     return buf;
 }
 
 void SendToHost(const char* channel, const void* data, int size)
 {
-    arrayWithLength<unsigned char> buf = Pack(channel, data, size);
+    arrayWithLength<unsigned char> buf = Pack(CallerId(__builtin_return_address(0)), channel, data, size);
     if (buf.data == 0)
         return;
     Minecraft* mc = Minecraft::GetInstance();
@@ -391,7 +401,7 @@ void SendToHost(const char* channel, const void* data, int size)
 
 void SendToPlayer(void* serverPlayer, const char* channel, const void* data, int size)
 {
-    arrayWithLength<unsigned char> buf = Pack(channel, data, size);
+    arrayWithLength<unsigned char> buf = Pack(CallerId(__builtin_return_address(0)), channel, data, size);
     if (buf.data == 0)
         return;
     boost::shared_ptr<Packet> packet(new ClientboundCustomPayloadPacket(PC_MOD_MESSAGE_CHANNEL, buf));
@@ -654,12 +664,20 @@ void PcModHooksMessage(ServerPlayer* player, const unsigned char* data, int len)
     if (messageHooks.empty() || data == 0 || len < 1)
         return;
     int n = data[0];
-    if (n < 1 || n > MAX_CHANNEL || 1 + n > len)
+    if (n < 3 || 1 + n > len)
         return;
-    std::string channel((const char*)data + 1, n);
+    std::string name((const char*)data + 1, n);
+    size_t colon = name.find(':');
+    if (colon == std::string::npos || colon == 0 || name.size() - colon - 1 < 1
+        || (int)(name.size() - colon - 1) > MAX_CHANNEL)
+        return;
+    std::string id = name.substr(0, colon);
+    std::string channel = name.substr(colon + 1);
     size_t prev = PcNativeModsCurrent();
     for (size_t i = 0; i < messageHooks.size(); i++)
     {
+        if (messageHooks[i].id != id)
+            continue;
         PcNativeModsSetCurrent(messageHooks[i].mod);
         messageHooks[i].fn(player, channel.c_str(), data + 1 + n, len - 1 - n, messageHooks[i].user);
     }

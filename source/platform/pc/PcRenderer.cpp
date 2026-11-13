@@ -293,6 +293,7 @@ GLuint boxProgram = 0;
 GLint boxMatrix = -1;
 GLint boxColour = -1;
 GLuint s_underlayFramebuffer = 0;
+bool s_underlayAlone = false;
 int s_underlayWidth = 0;
 int s_underlayHeight = 0;
 ProgramInfo programs[ePcVertexShader_Count][ePcPixelShader_Count];
@@ -775,11 +776,15 @@ void PcBindMainTargetAfterCallback()
     PcResyncRendererState();
 }
 
+int screenBeforeExternal = 0;
+
 bool PcBeginExternalTarget(unsigned int fbo, int w, int h)
 {
-    if (!s_glReady || !s_isRenderThread || externalTarget || s_screen != 0 || w <= 0 || h <= 0)
+    if (!s_glReady || !s_isRenderThread || externalTarget || w <= 0 || h <= 0)
         return false;
     externalTarget = true;
+    screenBeforeExternal = s_screen;
+    s_screen = 0;
     mainTargetWidth = s_targetWidth[0];
     mainTargetHeight = s_targetHeight[0];
     s_targetWidth[0] = w;
@@ -796,7 +801,8 @@ void PcEndExternalTarget()
     externalTarget = false;
     s_targetWidth[0] = mainTargetWidth;
     s_targetHeight[0] = mainTargetHeight;
-    PcGl::BindFramebuffer(GL_FRAMEBUFFER, frameBuffers[0]);
+    s_screen = screenBeforeExternal;
+    PcGl::BindFramebuffer(GL_FRAMEBUFFER, frameBuffers[s_screen]);
     PcResyncRendererState();
 }
 
@@ -942,8 +948,9 @@ void PcCopyMainTargetTo(unsigned int fbo)
                   s_targetHeight[0]);
 }
 
-void PcSetWindowUnderlay(unsigned int fbo, int w, int h)
+void PcSetWindowUnderlay(unsigned int fbo, int w, int h, bool alone)
 {
+    s_underlayAlone = alone;
     s_underlayFramebuffer = fbo;
     s_underlayWidth = w;
     s_underlayHeight = h;
@@ -1548,6 +1555,7 @@ void Renderer::Present()
     PcGl::Disable(GL_CULL_FACE);
     PcGl::Disable(GL_STENCIL_TEST);
     const float gamma = 1.0f / (static_cast<float>(s_gamma) * 3.0517578125e-05f * 1.5f + 0.5f);
+    bool viewOnly = false;
     if (s_underlayFramebuffer != 0)
     {
         int sourceWidth = s_underlayWidth;
@@ -1568,17 +1576,22 @@ void Renderer::Present()
         PcGl::UseProgram(s_presentOverProgram);
         PcGl::Uniform1f(s_presentOverGamma, gamma);
         s_underlayFramebuffer = 0;
+        viewOnly = s_underlayAlone;
     }
     else
     {
         PcGl::UseProgram(s_presentProgram);
         PcGl::Uniform1f(s_presentGamma, gamma);
     }
-    PcGl::ActiveTexture(GL_TEXTURE0);
-    PcGl::BindTexture(GL_TEXTURE_2D, s_colourTextures[0]);
-    PcGl::DrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    if (!viewOnly)
+    {
+        PcGl::ActiveTexture(GL_TEXTURE0);
+        PcGl::BindTexture(GL_TEXTURE_2D, s_colourTextures[0]);
+        PcGl::DrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    }
     PcGl::Disable(GL_BLEND);
-    DrawMenuCursor(windowWidth, windowHeight, uiFrame[2]);
+    if (!viewOnly)
+        DrawMenuCursor(windowWidth, windowHeight, uiFrame[2]);
     if (PcProfilerSyncGpu())
     {
         PIXBeginNamedEvent(0.0f, "GPU finish");

@@ -24,6 +24,7 @@
 #include "game/item/BowItem.hpp"
 #include "game/item/ItemInstance.hpp"
 #include "game/item/Items.hpp"
+#include "game/client/render/BlockRenderer.hpp"
 #include "game/item/MapItem.hpp"
 #include "game/item/MapItemSavedData.hpp"
 #include "game/world/Level.hpp"
@@ -786,7 +787,8 @@ void ItemInHandRenderer::renderModHand(const HumanoidArm* arm, const float* view
             renderer->renderLeftHand(player);
         GlStateManager::enableCull();
     }
-    if (!item->isEmpty())
+    const bool heldMap = !item->isEmpty() && item->getItem() == Items::filledMap;
+    if (!item->isEmpty() && !heldMap)
     {
         if (item->getItem() != NULL)
         {
@@ -795,6 +797,15 @@ void ItemInHandRenderer::renderModHand(const HumanoidArm* arm, const float* view
                                     (float)(tint & 0xFF) / 255.0f, 1.0f);
         }
         static_cast<HumanoidModel*>(renderer->getModel())->translateToHandItem(0.0625f, arm);
+        Block* block = item->getItem() != NULL ? Block::byItem(item->getItem()) : NULL;
+        if (block != NULL && item->getItem()->getIconType() == 0
+            && BlockRenderer::canRender(block->defaultBlockState()->getRenderShape()))
+        {
+            const float middle = (right ? -1.0f : 1.0f) * 0.0625f;
+            GlStateManager::translatef(middle, 0.0f, 0.0f);
+            GlStateManager::rotatef(180.0f, 0.0f, 1.0f, 0.0f);
+            GlStateManager::translatef(-middle, 0.0f, 0.0f);
+        }
         GlStateManager::translatef(0.0f, MOD_FIST_Y, 0.0f);
         GlStateManager::rotatef(90.0f, 1.0f, 0.0f, 0.0f);
         GlStateManager::translatef(0.0f, -MOD_FIST_Y, 0.0f);
@@ -805,6 +816,19 @@ void ItemInHandRenderer::renderModHand(const HumanoidArm* arm, const float* view
                    !right, 0, true);
     }
     GlStateManager::popMatrix();
+    if (heldMap)
+    {
+        GlStateManager::pushMatrix();
+        GlStateManager::loadIdentity();
+        GlStateManager::glMultMatrixf(const_cast<float*>(viewFromHand));
+        GlStateManager::translatef(0.0f, 0.06f, -0.14f);
+        GlStateManager::rotatef(-45.0f, 1.0f, 0.0f, 0.0f);
+        GlStateManager::scalef(0.7f, 0.7f, 0.7f);
+        GlStateManager::disableCull();
+        renderMap(item, right ? 1 : 0);
+        GlStateManager::enableCull();
+        GlStateManager::popMatrix();
+    }
     GlStateManager::color4f(1.0f, 1.0f, 1.0f, 1.0f);
 }
 #endif
