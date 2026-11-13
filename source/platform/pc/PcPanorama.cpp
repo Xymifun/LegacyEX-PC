@@ -61,7 +61,7 @@ bool PcPanoramaAvailable(int pano)
         return false;
     if (pano == kPcPanoramaDefault)
         return true;
-    FILE* fp = fopen(PanoramaPath(pano, false).c_str(), "rb");
+    FILE* fp = fopen(PcResolvePath(PanoramaPath(pano, false).c_str()).c_str(), "rb");
     if (fp == 0)
         return false;
     fclose(fp);
