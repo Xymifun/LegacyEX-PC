@@ -253,7 +253,7 @@ bool CreateGlContext()
 }
 }
 
-bool PcOsWindowCreate(int width, int height, const char* title, bool visible)
+bool PcOsWindowCreate(int width, int height, const char* title, bool visible, bool maximized)
 {
     HINSTANCE instance = GetModuleHandleW(0);
     WNDCLASSEXW windowClass;
@@ -295,7 +295,7 @@ bool PcOsWindowCreate(int width, int height, const char* title, bool visible)
 
     if (visible)
     {
-        ShowWindow(s_window, SW_SHOW);
+        ShowWindow(s_window, maximized ? SW_SHOWMAXIMIZED : SW_SHOW);
         UpdateWindow(s_window);
     }
     return true;

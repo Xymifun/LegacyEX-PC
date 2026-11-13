@@ -7,6 +7,8 @@
 void PcEd25519PublicKey(const unsigned char seed[32], unsigned char publicKey[32]);
 void PcEd25519Sign(const unsigned char seed[32], const unsigned char* message, size_t size,
                    unsigned char signature[64]);
+bool PcEd25519Verify(const unsigned char publicKey[32], const unsigned char* message, size_t size,
+                     const unsigned char signature[64]);
 void PcSha512(const unsigned char* data, size_t size, unsigned char digest[64]);
 
 struct PcSha512Context

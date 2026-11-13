@@ -15,7 +15,7 @@ class C4JEventImpl;
 const unsigned short kPcLanGamePort = 25565;
 const unsigned short kPcLanDiscoveryPort = 25566;
 const unsigned int kPcLanHelloMagic = 0x4350434D;
-const unsigned short kPcLanProtocolVersion = 0x886;
+const unsigned short kPcLanProtocolVersion = 0x887;
 
 class PcLanTransport
 {
@@ -94,6 +94,8 @@ private:
     bool ReceiveFrame(Connection* connection, std::vector<unsigned char>* frame);
     bool ReceiveFromConnection(Connection* connection, unsigned char* buffer, unsigned int size);
     bool StartRelay(Connection* connection);
+    bool SendJoinIdentity(Connection* connection, const unsigned char* challenge);
+    bool CheckJoinIdentity(Connection* connection);
     Connection* StartConnection(PcOsSocket socket, unsigned int address, unsigned short port, bool outgoing,
                                 unsigned long long stationId, unsigned int relayWorld = 0,
                                 unsigned long long relaySecret = 0, const PcVerifiedIdentities* verified = 0);

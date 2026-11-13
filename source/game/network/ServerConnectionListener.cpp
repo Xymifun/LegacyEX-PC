@@ -100,6 +100,10 @@ void ServerConnectionListener::sendPreLoginResponse()
             ++playerCount;
         }
     }
+#ifdef MINECRAFT_PC
+    for (unsigned int i = 0; i < playerCount; ++i)
+        playerUids[i] = PlayerUID(0);
+#endif
 
     std::wstring accountName(L"-");
     accountName = convStringToWstring(std::string(gProfile->GetNetworkAccountID()));

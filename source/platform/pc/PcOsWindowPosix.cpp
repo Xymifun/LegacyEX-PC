@@ -2,7 +2,7 @@
 
 #include "platform/pc/PcOs.hpp"
 
-bool PcOsWindowCreate(int, int, const char*, bool)
+bool PcOsWindowCreate(int, int, const char*, bool, bool)
 {
     return false;
 }

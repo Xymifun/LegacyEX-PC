@@ -1,6 +1,9 @@
 #include "platform/pc/PcLanTransport.hpp"
 
+#include "platform/pc/PcAccount.hpp"
 #include "platform/pc/PcContent.hpp"
+#include "platform/pc/PcEd25519.hpp"
+#include "platform/pc/PcKnownIdentities.hpp"
 #include "platform/pc/PcLobbyClient.hpp"
 #include "platform/pc/PcLobbyProtocol.hpp"
 
@@ -36,6 +39,12 @@ const unsigned int kSendTimeoutMilliseconds = 5000;
 const unsigned long long SLOW_SEND_NS = 250ULL * 1000000ULL;
 const unsigned long long SLOW_SEND_LOG_NS = 5000ULL * 1000000ULL;
 const unsigned int HELLO_WAIT_POLL_MS = 50;
+const unsigned char JOIN_CHALLENGE = 'C';
+const unsigned char JOIN_IDENTITY = 'J';
+const unsigned int CHALLENGE_SIZE = 16;
+const unsigned int IDENTITY_ENTRY = 16 + 32 + 64;
+const int MAX_JOIN_IDENTITIES = 1 + kPcGuestIdentities;
+const char JOIN_CONTEXT[] = "LCE join identity v1";
 
 enum ProbeState
 {
@@ -450,6 +459,104 @@ int PcLanTransport::ConnectionThreadProc(void* arg)
     return 0;
 }
 
+static std::vector<unsigned char> joinMessage(const unsigned char* challenge, unsigned long long hostStation,
+                                              const unsigned char* uuid)
+{
+    std::vector<unsigned char> msg(JOIN_CONTEXT, JOIN_CONTEXT + sizeof(JOIN_CONTEXT) - 1);
+    msg.insert(msg.end(), challenge, challenge + CHALLENGE_SIZE);
+    for (int i = 0; i < 8; i++)
+        msg.push_back((unsigned char)(hostStation >> (8 * i)));
+    msg.insert(msg.end(), uuid, uuid + 16);
+    return msg;
+}
+
+static void addJoinEntry(std::vector<unsigned char>* frame, const unsigned char* uuid, const unsigned char* key,
+                         const unsigned char* sig)
+{
+    frame->insert(frame->end(), uuid, uuid + 16);
+    frame->insert(frame->end(), key, key + 32);
+    frame->insert(frame->end(), sig, sig + 64);
+}
+
+static std::string uuidText(const unsigned char* uuid)
+{
+    char buf[40];
+    for (int i = 0; i < 16; i++)
+        sprintf(buf + 2 * i, "%02x", uuid[i]);
+    return buf;
+}
+
+bool PcLanTransport::SendJoinIdentity(Connection* conn, const unsigned char* challenge)
+{
+    std::vector<unsigned char> frame;
+    frame.push_back(JOIN_IDENTITY);
+    frame.push_back((unsigned char)MAX_JOIN_IDENTITIES);
+    unsigned char uuid[16], key[32], sig[64];
+    PcAccountUuid(uuid);
+    std::vector<unsigned char> msg = joinMessage(challenge, conn->stationId, uuid);
+    if (!PcAccountSign(&msg[0], msg.size(), key, sig))
+    {
+        memset(key, 0, sizeof(key));
+        memset(sig, 0, sizeof(sig));
+    }
+    addJoinEntry(&frame, uuid, key, sig);
+    for (int guest = 1; guest <= kPcGuestIdentities; guest++)
+    {
+        PcGuestAccountUuid(guest, uuid);
+        msg = joinMessage(challenge, conn->stationId, uuid);
+        if (!PcGuestAccountSign(guest, &msg[0], msg.size(), key, sig))
+        {
+            memset(key, 0, sizeof(key));
+            memset(sig, 0, sizeof(sig));
+        }
+        addJoinEntry(&frame, uuid, key, sig);
+    }
+    return SendFrame(conn, &frame[0], (unsigned int)frame.size());
+}
+
+bool PcLanTransport::CheckJoinIdentity(Connection* conn)
+{
+    unsigned char challenge[1 + CHALLENGE_SIZE];
+    challenge[0] = JOIN_CHALLENGE;
+    if (!PcOsRandomBytes(challenge + 1, CHALLENGE_SIZE))
+        return false;
+    std::vector<unsigned char> frame;
+    if (!SendFrame(conn, challenge, sizeof(challenge)) || !ReceiveFrame(conn, &frame))
+        return false;
+    if (frame.size() < 2 || frame[0] != JOIN_IDENTITY || frame[1] < 1 || frame[1] > MAX_JOIN_IDENTITIES
+        || frame.size() != 2 + frame[1] * IDENTITY_ENTRY)
+    {
+        printf("[pc] lan: station %016llx sent no identity; refused\n", conn->stationId);
+        fflush(stdout);
+        return false;
+    }
+    PcVerifiedIdentities verified;
+    for (int i = 0; i < frame[1]; i++)
+    {
+        const unsigned char* entry = &frame[2 + i * IDENTITY_ENTRY];
+        const unsigned char* uuid = entry;
+        const unsigned char* key = entry + 16;
+        const unsigned char* sig = entry + 48;
+        std::vector<unsigned char> msg = joinMessage(challenge + 1, m_localStationId, uuid);
+        bool good = PcEd25519Verify(key, &msg[0], msg.size(), sig);
+        bool known = good && PcKnownIdentityCheck(uuid, key);
+        if (i == 0 && !known)
+        {
+            printf("[pc] lan: station %016llx could not prove identity %s (%s); refused\n", conn->stationId,
+                   uuidText(uuid).c_str(), good ? "another key than it first joined with" : "bad signature");
+            fflush(stdout);
+            return false;
+        }
+        if (known && !verified.Contains(uuid))
+            memcpy(verified.uuids[verified.count++], uuid, 16);
+    }
+    EnterCriticalSection(&m_connectionLock);
+    conn->verified = true;
+    conn->verifiedIdentities = verified;
+    LeaveCriticalSection(&m_connectionLock);
+    return true;
+}
+
 void PcLanTransport::RunConnection(Connection* conn)
 {
     std::vector<unsigned char> frame;
@@ -524,6 +631,22 @@ void PcLanTransport::RunConnection(Connection* conn)
         conn->stationId = ReadU64(&frame[8]);
         conn->peerHelloData.assign(frame.begin() + kHelloSize, frame.end());
         LeaveCriticalSection(&m_connectionLock);
+    }
+
+    if (conn->outgoing)
+    {
+        if (!ReceiveFrame(conn, &frame) || frame.size() != 1 + CHALLENGE_SIZE || frame[0] != JOIN_CHALLENGE
+            || !SendJoinIdentity(conn, &frame[1]))
+        {
+            PushEvent(eEvent_ConnectFailed, 0);
+            conn->finished = true;
+            return;
+        }
+    }
+    else if (!CheckJoinIdentity(conn))
+    {
+        conn->finished = true;
+        return;
     }
 
     conn->connected = true;

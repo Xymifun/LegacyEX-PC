@@ -171,7 +171,7 @@ struct PcOsGamepadState
 size_t PcOsGamepadPoll(PcOsGamepadState* states, size_t capacity);
 void PcOsGamepadSetPlayer(unsigned int id, int player);
 
-bool PcOsWindowCreate(int width, int height, const char* title, bool visible);
+bool PcOsWindowCreate(int width, int height, const char* title, bool visible, bool maximized);
 bool PcOsWindowPollEvent(PcOsWindowEvent* event);
 void PcOsWindowSwapBuffers();
 void PcOsWindowGetClientSize(int* width, int* height);

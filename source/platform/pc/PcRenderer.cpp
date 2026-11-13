@@ -305,6 +305,7 @@ int s_fixedRenderHeight = 0;
 bool s_letterbox = false;
 int s_windowWidth = 1280;
 int s_windowHeight = 720;
+bool windowSizeSet = false;
 bool s_wideWorldPass = false;
 bool s_wideUiPass = false;
 bool s_coverUiPass = false;
@@ -695,6 +696,7 @@ void PcSetWindowSize(int width, int height)
     {
         s_windowWidth = width;
         s_windowHeight = height;
+        windowSizeSet = true;
     }
 }
 
@@ -1160,7 +1162,8 @@ void Renderer::Initialise()
     s_isRenderThread = true;
     if (s_displayMode != ePcDisplay_Headless)
     {
-        if (!PcOsWindowCreate(s_windowWidth, s_windowHeight, "Minecraft", s_displayMode == ePcDisplay_Window))
+        const bool maximized = !windowSizeSet && !startFullscreen;
+        if (!PcOsWindowCreate(s_windowWidth, s_windowHeight, "Minecraft", s_displayMode == ePcDisplay_Window, maximized))
             printf("[pc] gl: could not create a window with an OpenGL 3.3 context; running headless\n");
         else if (!PcGl::Load())
             printf("[pc] gl: OpenGL functions are missing; running headless\n");
