@@ -3,13 +3,35 @@
 Source code of the PC version for LegacyEX, which is a TU74 PC Port of Minecraft Legacy Edition by 4J Studios. Keep in mind this build is barebones and mostly for developers to look at closer
 To keep this legal, no game files are included and you need your Wii U Edition files to access this open-source version of the game
 
-## What you need on Windows
+## Build (Docker)
 
-Building on Windows isn't tested, and since I made this on Arch Linux it's currently only guaranteed for Arch Linux.
-For Windows: Get the prebuilt zip from the Releases page instead, which has the game, prepare.py and a README.txt with the basic steps
+Python 3 and either docker or podman are required, optionally a wine distribution to run the game
 
-## What you need on Linux
+## 1: Game files
 
+Copy the game files from your dumps into assets/, assuming you have folders like "/Minecraft Wii U Edition [Game] [00050000101d9d00]/" and "/Minecraft Wii U Edition [Update] [0005000e101d9d00]/"
+
+```
+python3 tools/prepare.py --base "<base game dump>" --update "<update dump>"
+```
+
+## 2: Build the game
+
+```
+./build_docker.sh pc64 # Windows x86-64
+```
+
+Other uses of ./build_docker.sh can be found either via `python3 build.py --help` or `./build_docker.sh --help`, substituting `build.py` for `./build_docker.sh`.
+
+## 3: Play (x86-64)
+
+```
+cd build/pc64
+wine MinecraftPC.exe
+```
+
+## Build (Linux)
+The following packages are required:
 clang, lld, llvm, ninja, cmake, python 3, the mingw-w64 GCC runtime and Wine. On Arch Linux:
 
 ```
@@ -17,12 +39,7 @@ sudo pacman -S clang lld llvm ninja cmake python mingw-w64-gcc wine
 ```
 
 ## 1: Game files
-
-Copies the game files from your dumps into assets/, assuming you have folders like "/Minecraft Wii U Edition [Game] [00050000101d9d00]/" and "/Minecraft Wii U Edition [Update] [0005000e101d9d00]/"
-
-```
-python3 tools/prepare.py --base "<base game dump>" --update "<update dump>"
-```
+Follow game file instructions as seen above.
 
 ## 2: Libraries (you only need to do this one time)
 
@@ -39,7 +56,7 @@ cmake -S tools/pc -B build/pc64 -G Ninja -DCMAKE_TOOLCHAIN_FILE=$PWD/tools/pc/mi
 cmake --build build/pc64
 ```
 
-## 4: Play (64-bit)
+## 4: Play (x86-64)
 
 ```
 cd build/pc64
