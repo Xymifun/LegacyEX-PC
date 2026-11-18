@@ -19,7 +19,13 @@ enum PcStringId
     ePcString_Mute = 0x7FC0FF0D,
     ePcString_Unmute = 0x7FC0FF0E,
     ePcString_Unbind = 0x7FC0FF0F,
-    ePcString_ProximityChatDescription = 0x7FC0FF10
+    ePcString_ProximityChatDescription = 0x7FC0FF10,
+    ePcString_RemoveFriend = 0x7FC0FF11,
+    ePcString_Profile = 0x7FC0FF12,
+    ePcString_SendFriendRequest = 0x7FC0FF13,
+    ePcString_FriendRequest = 0x7FC0FF14,
+    ePcString_AcceptRequest = 0x7FC0FF15,
+    ePcString_DenyRequest = 0x7FC0FF16
 };
 #endif
 

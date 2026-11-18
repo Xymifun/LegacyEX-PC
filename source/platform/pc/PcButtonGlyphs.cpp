@@ -255,6 +255,8 @@ int PcButtonGlyphTexture(const char* name, int textureId)
         if (context < eContext_Game || context > eContext_Container)
             context = eContext_Menu;
         file = context == eContext_Game ? GameKeyboardFile(glyph) : kKeyboardFiles[context][glyph];
+        if (context == eContext_Container && glyph == eGlyph_L && PcKeyGlyphName(PcKeyBinding(ePcKey_TakeEverything)) != 0)
+            file = PcKeyGlyphName(PcKeyBinding(ePcKey_TakeEverything));
         folder = "keyboard";
     }
     else
@@ -272,7 +274,11 @@ int PcButtonGlyphTexture(const char* name, int textureId)
     const bool keyboard = set == ePcGlyphSet_Keyboard;
     std::string base = keyboard ? std::string(file) : std::string("PC/Glyphs/") + folder + "/" + file;
     const char* extension = keyboard ? "" : ".png";
-    int texture = active ? GlyphTexture(base + "_use" + extension, keyboard) : -1;
+    int texture = -1;
+    if (active && strstr(name, "Active2") != 0)
+        texture = GlyphTexture(base + "_use2" + extension, keyboard);
+    if (active && texture < 0)
+        texture = GlyphTexture(base + "_use" + extension, keyboard);
     if (texture < 0)
         texture = GlyphTexture(base + extension, keyboard);
     return texture >= 0 ? texture : textureId;

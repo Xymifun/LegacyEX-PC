@@ -19,6 +19,9 @@
 #include "game/ui/UIControl_Base.hpp"
 #include "game/ui/UIControl_CheckBox.hpp"
 #include "game/ui/UILayer.hpp"
+#ifdef MINECRAFT_PC
+#include "platform/pc/PcDisplay.hpp"
+#endif
 #include "game/ui/fui.hpp"
 #include "game/ui/fuiFile.hpp"
 #include "game/ui/fuiRenderNode.hpp"
@@ -248,6 +251,17 @@ void UIScene::render(int width, int height, C4JRender::eViewportType viewport)
     if (!m_reloading && m_hasTicked && m_movie != 0)
     {
         gConsoleUIController.setupRenderPosition(viewport);
+#ifdef MINECRAFT_PC
+        if (viewport == C4JRender::eViewportType_FullScreen && fillsWindowBars() && PcHasUiBars())
+        {
+            for (int bar = 1; bar <= 2; bar++)
+            {
+                PcSetBarFillPass(bar);
+                gFui->render(m_movie, 0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height));
+            }
+            PcSetBarFillPass(0);
+        }
+#endif
         gFui->render(m_movie, 0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height));
     }
 }

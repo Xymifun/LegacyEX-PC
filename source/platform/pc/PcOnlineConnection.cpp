@@ -12,6 +12,7 @@
 
 #include <vector>
 
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,6 +24,7 @@ const char OLD_CONNECTION_FILE[] = "online-host.txt";
 const char LOBBY_ADDRESS_FILE[] = "online-lobby.txt";
 const unsigned long long kPollNanoseconds = 1000ULL * 1000000ULL;
 const unsigned long long RESOLVE_RETRY_NS = 60000ULL * 1000000ULL;
+const char FRIENDS_LOBBY[] = "mclegacy.space";
 
 bool loaded = false;
 std::string rememberedLobby;
@@ -165,6 +167,8 @@ std::wstring PcOnlineMenuLabel()
     switch (PcOnlineConnectionStatus())
     {
     case ePcOnline_Connected:
+        if (PcOnlineConnectionIsFriendsLobby())
+            return L"Friends List";
         return L"<font color=\"#55FF55\">[CONNECTED]</font>";
     case ePcOnline_Connecting:
         return L"[CONNECTING...]";
@@ -182,6 +186,16 @@ std::wstring PcOnlineMenuLabel()
     default:
         return L"Online Multiplayer";
     }
+}
+
+bool PcOnlineConnectionIsFriendsLobby()
+{
+    if (PcOnlineConnectionStatus() != ePcOnline_Connected || !PcOnlineConnectionIsLobby(0))
+        return false;
+    std::string name = hostName;
+    for (size_t i = 0; i < name.size(); i++)
+        name[i] = (char)tolower((unsigned char)name[i]);
+    return name == FRIENDS_LOBBY;
 }
 
 bool PcOnlineConnectionIsLobby(unsigned short* port)

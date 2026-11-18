@@ -144,6 +144,9 @@ public:
     static void AddForDelete(CompressedBlockStorage*);
     static void AddForDelete(SparseDataStorage*);
     bool IsUpdateThreadEnabled();
+#ifdef MINECRAFT_PC
+    void PcGetFogColour(float* colour) const;
+#endif
 
 private:
     OSFastMutex mUpdateThreadMutex;

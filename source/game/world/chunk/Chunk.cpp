@@ -351,6 +351,9 @@ void Chunk::rebuild(unsigned int* count)
                         translateToPos();
                         builder->begin();
                         builder->offset((float)-mX, (float)-mZ, (float)-mDimension);
+#ifdef MINECRAFT_PC
+                        builder->quadElement(Block::getElementId(Blocks::stained_glass->defaultBlockState()));
+#endif
                         for (unsigned int ring = 0; ring < ringPositions.size(); ring++)
                         {
                             PIXBeginNamedEvent(0.0f, "Tesselate in world");
@@ -415,6 +418,9 @@ void Chunk::rebuild(unsigned int* count)
                                     builder->offset((float)-mX, (float)-mZ, (float)-mDimension);
                                 }
                                 PIXBeginNamedEvent(0.0f, "Tesselate in world");
+#ifdef MINECRAFT_PC
+                                builder->quadElement(useExtra ? extraElement : (element & 0x7fff));
+#endif
                                 if (useExtra)
                                     rendered |= blockRenderer->tesselateInWorld(Block::getStateByElementId(element),
                                                                                 pos, NULL,
@@ -430,6 +436,9 @@ void Chunk::rebuild(unsigned int* count)
 
                 if (started)
                 {
+#ifdef MINECRAFT_PC
+                    builder->quadElement(0);
+#endif
                     builder->end();
                     bounds.addBounds(builder->mBounds);
                     GlStateManager::popMatrix();

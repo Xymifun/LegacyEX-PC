@@ -1,4 +1,7 @@
 #include "game/client/render/TexturePackRepository.hpp"
+#ifdef MINECRAFT_PC
+#include "platform/pc/PcTextureOverride.hpp"
+#endif
 
 #include <boost/unordered_map.hpp>
 #include <new>
@@ -97,6 +100,9 @@ bool TexturePackRepository::selectTexturePackById(unsigned int packId, bool forc
 {
     bool result = false;
     gApp.SetRequiredTexturePackID(packId);
+#ifdef MINECRAFT_PC
+    packId = PcTextureOverrideApply(packId);
+#endif
     boost::unordered_map<unsigned int, TexturePack*>::iterator iterator = m_texturePacksById.find(packId);
     if (iterator != m_texturePacksById.end())
     {

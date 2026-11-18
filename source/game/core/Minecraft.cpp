@@ -1,4 +1,7 @@
 #include "game/core/Minecraft.hpp"
+#ifdef MINECRAFT_PC
+#include "platform/pc/PcTextureOverride.hpp"
+#endif
 #include "game/core/StringIds.hpp"
 #include "game/ui/DeathScreen.hpp"
 #include "game/core/EntityType.hpp"
@@ -445,7 +448,16 @@ MaterialTable* Minecraft::getMaterialTable()
 
 StructureManager* Minecraft::getStructureManager()
 {
-    StructureManager* structureManager = mTexturePackRepository->getSelected()->getStructureManager();
+    TexturePack* structurePack = mTexturePackRepository->getSelected();
+#ifdef MINECRAFT_PC
+    if (PcTextureOverrideActive())
+    {
+        structurePack = mTexturePackRepository->getTexturePackById(PcTextureOverrideWorldPack(0));
+        if (structurePack == NULL)
+            structurePack = TexturePackRepository::defaultTexturePack;
+    }
+#endif
+    StructureManager* structureManager = structurePack->getStructureManager();
     if (structureManager == NULL)
         structureManager = TexturePackRepository::defaultTexturePack->getStructureManager();
     return structureManager;
@@ -453,6 +465,9 @@ StructureManager* Minecraft::getStructureManager()
 
 unsigned int Minecraft::getCurrentTexturePackId()
 {
+#ifdef MINECRAFT_PC
+    return PcTextureOverrideWorldPack(mTexturePackRepository->getSelected()->getId());
+#endif
     return mTexturePackRepository->getSelected()->getId();
 }
 
@@ -3226,8 +3241,11 @@ void Minecraft::fjReloadTexturePack()
     mTexturePackRepository->updateUI();
 
     TexturePack* selected = mTexturePackRepository->getSelected();
-    if (selected->hasAudio() || selected->getId() == 0x801 || selected->getId() == 0x803 || selected->getId() == 0x806
-        || selected->getId() == 0x808)
+    unsigned int themeId = selected->getId();
+#ifdef MINECRAFT_PC
+    themeId = PcTextureOverrideWorldPack(themeId);
+#endif
+    if (selected->hasAudio() || themeId == 0x801 || themeId == 0x803 || themeId == 0x806 || themeId == 0x808)
     {
         const MiniGameDef* miniGame = GetMiniGame();
         ClientMasterGameMode* masterGameMode = GetInstance()->GetClientMasterGameMode();

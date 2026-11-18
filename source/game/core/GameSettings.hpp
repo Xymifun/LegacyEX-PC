@@ -222,6 +222,9 @@ public:
     static void SetPlayerSkin(int, const std::wstring&);
     static std::wstring GetPlayerSkinName(int);
     static uint32_t GetPlayerSkinId(int);
+#ifdef MINECRAFT_PC
+    static uint32_t PcStoredSkinId(int profile);
+#endif
     static void SetPlayerFavoriteSkin(int, int, unsigned int);
     static uint32_t GetPlayerFavoriteSkin(int, int);
     static uint8_t GetPlayerFavoriteSkinsPos(int);

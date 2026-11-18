@@ -20,6 +20,11 @@
 #include "game/ui/UIString.hpp"
 #include "game/ui/UILayer.hpp"
 #include "game/ui/fuiFile.hpp"
+#ifdef MINECRAFT_PC
+#include "game/ui/FJ_FuiNode.hpp"
+#include "game/ui/FJ_List.hpp"
+#include "game/ui/fuiRenderNode.hpp"
+#endif
 #include "game/world/LevelGenerationOptions.hpp"
 #include "game/core/GameSettings.hpp"
 
@@ -197,6 +202,10 @@ void UIScene_MapVoteMenu::Init()
         InitForVariant();
     else if (m_votableType == 2)
         InitForTheme();
+#ifdef MINECRAFT_PC
+    if (m_mapList.getFuiRenderNode() != NULL && m_mapList.getFuiRenderNode()->getFuiNode()->asFJ_List() != NULL)
+        m_mapList.getFuiRenderNode()->getFuiNode()->asFJ_List()->PcWrapEnds();
+#endif
 }
 
 void UIScene_MapVoteMenu::updateTooltips()

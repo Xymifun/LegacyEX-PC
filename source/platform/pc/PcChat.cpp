@@ -2,6 +2,7 @@
 
 #include "platform/pc/PcInput.hpp"
 #include "platform/pc/PcScripts.hpp"
+#include "platform/pc/PcTextKeyboard.hpp"
 
 #include <vector>
 
@@ -14,6 +15,7 @@ const unsigned int CHAT_LENGTH = 100;
 const size_t HISTORY_LENGTH = 100;
 
 bool CHAT_OPEN = false;
+bool padKeyboard = false;
 std::vector<std::u16string> HISTORY;
 size_t HISTORY_INDEX = 0;
 std::u16string DRAFT;
@@ -23,6 +25,7 @@ void Close()
     if (CHAT_OPEN)
         PcTextEntryEnd();
     CHAT_OPEN = false;
+    padKeyboard = false;
     PcInputSetChatOpen(false);
 }
 
@@ -76,12 +79,16 @@ void Send(Minecraft* mc, int pad)
 void PcChatTick(Minecraft* mc, int pad, bool gameActive)
 {
     char16_t key = PcInputConsumeChatKey();
+    bool fromPad = PcInputConsumeChatFromPad();
     if (!CHAT_OPEN)
     {
         if (gameActive && key != 0)
         {
             const char16_t initial[2] = {key == u'/' ? u'/' : u'\0', u'\0'};
             PcTextEntryBegin(initial, CHAT_LENGTH);
+            padKeyboard = fromPad;
+            if (padKeyboard)
+                PcTextKeyboardBegin();
             HISTORY_INDEX = HISTORY.size();
             DRAFT.clear();
             CHAT_OPEN = true;
@@ -112,6 +119,11 @@ void PcChatTick(Minecraft* mc, int pad, bool gameActive)
 bool PcChatActive()
 {
     return CHAT_OPEN;
+}
+
+bool PcChatOnScreenKeyboard()
+{
+    return CHAT_OPEN && padKeyboard;
 }
 
 std::wstring PcChatText()

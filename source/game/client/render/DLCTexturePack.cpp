@@ -1,4 +1,7 @@
 #include "game/client/render/DLCTexturePack.hpp"
+#ifdef MINECRAFT_PC
+#include "platform/pc/PcTextureOverride.hpp"
+#endif
 
 #include <string>
 
@@ -441,6 +444,9 @@ int DLCTexturePack::packMounted(void* data, int userIndex, unsigned int result, 
                             nextStart += miniGame4Count;
                         }
 
+#ifdef MINECRAFT_PC
+                        if (!PcTextureOverrideGameMusic())
+#endif
                         Minecraft::GetInstance()->mSoundEngine->SetStreamingSounds(
                             musicStart, musicStart + musicCount - 1, menuStart, menuStart + menuCount - 1, bossStart,
                             bossStart + bossCount - 1, miniGameStart, miniGameStart + miniGameCount - 1, creditsStart,

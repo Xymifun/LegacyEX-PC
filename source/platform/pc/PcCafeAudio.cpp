@@ -52,6 +52,7 @@ std::vector<float> s_mixBuffer;
 std::string s_capturePath;
 FILE* s_capture = 0;
 unsigned int s_capturedBytes = 0;
+bool audioMuted = false;
 
 std::map<AXVoice*, PcAxVoice*>& Voices()
 {
@@ -204,7 +205,7 @@ void StartOutput()
         if (s_capture != 0)
             WriteCaptureHeader();
     }
-    if (PcGetDisplayMode() == ePcDisplay_Window && PcOsAudioOpen(kOutputRate, kFramesPerBuffer, Mix))
+    if (PcGetDisplayMode() == ePcDisplay_Window && !audioMuted && PcOsAudioOpen(kOutputRate, kFramesPerBuffer, Mix))
     {
         printf("[pc] audio: %u Hz stereo output\n", kOutputRate);
     }
@@ -222,6 +223,11 @@ void StartOutput()
 void PcSetAudioCapture(const char* path)
 {
     s_capturePath = path;
+}
+
+void PcSetAudioMuted(bool muted)
+{
+    audioMuted = muted;
 }
 
 void AXInit()

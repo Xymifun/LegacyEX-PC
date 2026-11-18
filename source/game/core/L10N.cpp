@@ -83,6 +83,18 @@ const wchar_t* L10N::GetString(int id)
         return L"Unbind";
     if (id == ePcString_ProximityChatDescription)
         return L"When enabled, players will automatically have Proximity Chat turned on.";
+    if (id == ePcString_RemoveFriend)
+        return L"Remove Friend";
+    if (id == ePcString_Profile)
+        return L"Profile";
+    if (id == ePcString_SendFriendRequest)
+        return L"Send Friend Request";
+    if (id == ePcString_FriendRequest)
+        return L"Friend Request";
+    if (id == ePcString_AcceptRequest)
+        return L"Accept Request";
+    if (id == ePcString_DenyRequest)
+        return L"Deny Request";
     if (id == IDS_VOICE_CHAT)
         return L"Voice Chat";
     if (id == IDS_IN_GAME_GAMERTAGS)

@@ -18,6 +18,15 @@
 #include "game/core/GameSettings.hpp"
 #include "platform/wiiu/CProfile.hpp"
 
+#ifdef MINECRAFT_PC
+bool confirmTwiceNext = false;
+
+void PcMessageBoxConfirmTwice()
+{
+    confirmTwiceNext = true;
+}
+#endif
+
 UIScene_MessageBox::UIScene_MessageBox(int sceneType, void* sceneData, UILayer* layer) : UIScene(sceneType, layer)
 {
     ConsoleUIController::_MessageBoxData* data = static_cast<ConsoleUIController::_MessageBoxData*>(sceneData);
@@ -77,6 +86,12 @@ UIScene_MessageBox::UIScene_MessageBox(int sceneType, void* sceneData, UILayer* 
     static_cast<FJ_MessageBox*>(m_movie->getRootNode()->getFuiNode())->AutoResize();
     m_callback = data->callback;
     m_callbackData = data->callbackData;
+#ifdef MINECRAFT_PC
+    m_confirmTwice = confirmTwiceNext;
+    confirmTwiceNext = false;
+    m_armed = false;
+    m_firstLabel = L10N::GetString(data->messageParameters[0]);
+#endif
     layer->addComponent(sceneType, EUIScene_MenuBackground, 0);
     gConsoleUIController.HideChestRefillAnimation();
     gConsoleUIController.TouchBoxRebuild(this);
@@ -190,6 +205,16 @@ void UIScene_MessageBox::handlePress(int controlId, int)
                                                  C4JStorage::EMessageResult_FourthOption};
         result = static_cast<C4JStorage::EMessageResult>(results[controlId]);
     }
+#ifdef MINECRAFT_PC
+    if (m_confirmTwice && !m_armed && result == C4JStorage::EMessageResult_Accept)
+    {
+        m_armed = true;
+        int b = 4 - m_buttonCount;
+        if (b >= 0 && b < 4)
+            m_buttons[b].setLabel(UIString(L"<font color=\"#FF5555\">" + m_firstLabel + L"</font>"), true, true);
+        return;
+    }
+#endif
     navigateBack();
     if (m_callback != 0)
         (*m_callback)(m_callbackData, m_playerId, result);

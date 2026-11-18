@@ -9,6 +9,10 @@
 #include "platform/pc/PcPaths.hpp"
 #include "platform/pc/PcProfiler.hpp"
 #include "platform/pc/PcRendererShaders.hpp"
+#include "platform/pc/PcTerrainArena.hpp"
+#include "platform/pc/shaderpack/ShaderPipeline.hpp"
+
+#include <math.h>
 #include "platform/pc/PcSettings.hpp"
 #include "platform/pc/PcModViews.hpp"
 #include "platform/wiiu/NintendoFileSystem_WiiU.hpp"
@@ -46,11 +50,12 @@ struct Renderer::CommandBuffer
         float mMatrix[16];
         unsigned int mOffset;
         unsigned int mCount;
+        unsigned int mBucket[7];
     };
 
     CommandBuffer()
         : mId(-1), mVertexType(0), mPixelShaderType(0), mPrimitiveType(0), mVertexCount(0), mBuffer(0),
-          mVertexArray(0), mCountedBytes(0), mSingleMatrix(false)
+          mVertexArray(0), mCountedBytes(0), mSingleMatrix(false), mQuadBuffer(0)
     {
     }
 
@@ -66,6 +71,9 @@ struct Renderer::CommandBuffer
     unsigned int mVertexArray;
     int mCountedBytes;
     bool mSingleMatrix;
+    std::vector<unsigned short> mQuadElements;
+    unsigned int mQuadBuffer;
+    PcTerrainSlot mSlot;
 };
 
 namespace
@@ -110,6 +118,7 @@ const int VERTEX_REGISTER_BONES = 41;
 const int PIXEL_REGISTER_COLOURS = 0;
 const int PIXEL_REGISTER_FORCE_LOD = 8;
 const int PIXEL_REGISTER_LAYERED = 9;
+const int PIXEL_REGISTER_SHARP_TEXT = 30;
 
 const GLenum COMPARE_FUNCTIONS[8] = {GL_NEVER,   GL_LESS,     GL_EQUAL,  GL_LEQUAL,
                                      GL_GREATER, GL_NOTEQUAL, GL_GEQUAL, GL_ALWAYS};
@@ -191,6 +200,8 @@ struct ProgramInfo
     GLfloat alphaValue;
     GLint layers;
     GLint forceLod;
+    GLint chunkOffsetMode;
+    GLint chunkOffsetValue;
 };
 
 void EnterTimedCriticalSection(OSFastMutex* cs, const char* name)
@@ -207,6 +218,19 @@ RenderState s_state;
 PcDisplayMode s_displayMode = ePcDisplay_Window;
 bool s_glReady = false;
 __thread bool s_isRenderThread = false;
+GLuint s_packBoundBuffer = 0;
+GLuint s_packBoundQuads = 0;
+bool s_packTerrainUnitsBound = false;
+unsigned char faceMask = 0xff;
+ProgramInfo* s_currentProgramInfo = nullptr;
+struct TerrainBatch
+{
+    std::vector<GLsizei> counts;
+    std::vector<GLint> bases;
+};
+TerrainBatch s_terrainBatches[PcTerrainArenas::kMaxArenas];
+std::vector<int> s_terrainBatchArenas;
+std::vector<const void*> s_terrainBatchStarts;
 
 enum PcLeftover
 {
@@ -257,6 +281,7 @@ bool s_drcFrameStarted = false;
 unsigned short s_gamma = 0x2AAA;
 float vertexRegisters[VERTEX_REGISTERS][4];
 float pixelRegisters[PIXEL_REGISTERS][4];
+bool sharpText = false;
 int vertexDirtyFirst = 0;
 int vertexDirtyLast = VERTEX_REGISTERS;
 int pixelDirtyFirst = 0;
@@ -276,6 +301,10 @@ unsigned int streamOffset = 0;
 GLuint quadIndexBuffer = 0;
 GLsync s_frameFence = 0;
 const GLuint64 kFrameFenceTimeoutNanoseconds = 100000000ULL;
+#define RESIZE_NOVSYNC_FRAMES 30
+int lastSwapWidth = 0;
+int lastSwapHeight = 0;
+int noVsyncFrames = 0;
 GLuint s_presentProgram = 0;
 GLuint s_cursorProgram = 0;
 GLuint s_cursorTexture = 0;
@@ -309,6 +338,7 @@ bool windowSizeSet = false;
 bool s_wideWorldPass = false;
 bool s_wideUiPass = false;
 bool s_coverUiPass = false;
+int barFillPass = 0;
 bool startFullscreen = false;
 std::string s_screenshotPath;
 
@@ -587,7 +617,7 @@ void FitArea(int width, int height, int aspectWidth, int aspectHeight, int* area
 
 void TargetArea(int* area)
 {
-    if (s_screen == 0 && s_wideWorldPass)
+    if (s_screen == 0 && (s_wideWorldPass || barFillPass != 0))
     {
         area[0] = 0;
         area[1] = 0;
@@ -675,6 +705,34 @@ void ApplyViewportAndScissor()
         scissor[2] = right > left ? right - left : 0;
         scissor[3] = top > bottom ? top - bottom : 0;
     }
+    if (barFillPass != 0 && s_screen == 0)
+    {
+        int area[4];
+        FitArea(s_targetWidth[0], s_targetHeight[0], kScreenWidth[0], kScreenHeight[0], area);
+        int bar[4];
+        if (area[2] < s_targetWidth[0])
+        {
+            bar[0] = barFillPass == 1 ? 0 : area[0] + area[2];
+            bar[2] = barFillPass == 1 ? area[0] : s_targetWidth[0];
+            bar[1] = 0;
+            bar[3] = s_targetHeight[0];
+        }
+        else
+        {
+            bar[0] = 0;
+            bar[2] = s_targetWidth[0];
+            bar[1] = barFillPass == 1 ? 0 : area[1] + area[3];
+            bar[3] = barFillPass == 1 ? area[1] : s_targetHeight[0];
+        }
+        int left = scissor[0] > bar[0] ? scissor[0] : bar[0];
+        int bottom = scissor[1] > bar[1] ? scissor[1] : bar[1];
+        int right = scissor[0] + scissor[2] < bar[2] ? scissor[0] + scissor[2] : bar[2];
+        int top = scissor[1] + scissor[3] < bar[3] ? scissor[1] + scissor[3] : bar[3];
+        scissor[0] = left;
+        scissor[1] = bottom;
+        scissor[2] = right > left ? right - left : 0;
+        scissor[3] = top > bottom ? top - bottom : 0;
+    }
     if (GlChanged(s_gl.scissor, scissor, sizeof(scissor)))
         PcGl::Scissor(scissor[0], scissor[1], scissor[2], scissor[3]);
 }
@@ -718,6 +776,18 @@ void PcSetWideUiPass(bool wide)
 void PcSetCoverUiPass(bool cover)
 {
     s_coverUiPass = cover;
+}
+
+void PcSetBarFillPass(int bar)
+{
+    barFillPass = bar;
+}
+
+bool PcHasUiBars()
+{
+    int area[4];
+    FitArea(s_targetWidth[0], s_targetHeight[0], kScreenWidth[0], kScreenHeight[0], area);
+    return area[2] < s_targetWidth[0] || area[3] < s_targetHeight[0];
 }
 
 float PcGetUiWidthScale()
@@ -805,6 +875,26 @@ void PcEndExternalTarget()
     s_targetHeight[0] = mainTargetHeight;
     s_screen = screenBeforeExternal;
     PcGl::BindFramebuffer(GL_FRAMEBUFFER, frameBuffers[s_screen]);
+    PcResyncRendererState();
+}
+
+bool PcShaderPackTarget(unsigned int* framebuffer, int* width, int* height)
+{
+    if (!s_glReady || !s_isRenderThread || externalTarget || s_screen != 0)
+        return false;
+    *framebuffer = frameBuffers[0];
+    *width = s_targetWidth[0];
+    *height = s_targetHeight[0];
+    return true;
+}
+
+void PcEndPackDraws(bool always);
+
+void PcShaderPackRestore()
+{
+    if (!s_glReady || !s_isRenderThread)
+        return;
+    PcEndPackDraws(true);
     PcResyncRendererState();
 }
 
@@ -993,6 +1083,11 @@ const char* PcGetGlRendererName()
 PcDisplayMode PcGetDisplayMode()
 {
     return s_displayMode;
+}
+
+void PcRendererSharpText(bool on)
+{
+    sharpText = on;
 }
 
 void PcRequestScreenshot(const char* path)
@@ -1485,11 +1580,16 @@ void Renderer::ReleasePendingObjects()
     buffers.swap(mPendingBufferDeletes);
     std::vector<unsigned int> vertexArrays;
     vertexArrays.swap(mPendingVertexArrayDeletes);
+    PcTerrainArenas::Get().FlushReleases();
     LeaveCriticalSection(&mCommandBufferMutex);
     if (!vertexArrays.empty())
         PcGl::DeleteVertexArrays((GLsizei)vertexArrays.size(), &vertexArrays[0]);
     if (!buffers.empty())
+    {
         PcGl::DeleteBuffers((GLsizei)buffers.size(), &buffers[0]);
+        s_packBoundBuffer = 0;
+        s_packBoundQuads = 0;
+    }
 
     EnterTimedCriticalSection(&mTextureMutex, "Wait texture lock");
     std::vector<unsigned int> textures;
@@ -1601,9 +1701,31 @@ void Renderer::Present()
         PcGl::Finish();
         PIXEndNamedEvent();
     }
+    if (s_displayMode == ePcDisplay_Window)
+    {
+        if (lastSwapWidth != 0 && (windowWidth != lastSwapWidth || windowHeight != lastSwapHeight))
+        {
+            if (noVsyncFrames == 0)
+                PcOsWindowSetSwapInterval(1);
+            noVsyncFrames = RESIZE_NOVSYNC_FRAMES;
+            fprintf(stderr, "[pc] DEBUG resize %dx%d -> %dx%d frame %u\n", lastSwapWidth, lastSwapHeight, windowWidth, windowHeight, (unsigned)mFrameCount);
+        }
+        else if (noVsyncFrames > 0)
+        {
+            noVsyncFrames--;
+            if (noVsyncFrames == 0)
+                PcOsWindowSetSwapInterval(PcSettingsVsync() ? 1 : 0);
+        }
+        lastSwapWidth = windowWidth;
+        lastSwapHeight = windowHeight;
+    }
+    static int dbgLeft = 0;
+    if (noVsyncFrames == RESIZE_NOVSYNC_FRAMES) dbgLeft = 200;
+    if (dbgLeft > 0) { fprintf(stderr, "[pc] DEBUG swap %u %dx%d...", (unsigned)mFrameCount, windowWidth, windowHeight); fflush(stderr); }
     PIXBeginNamedEvent(0.0f, "Swap buffers");
     PcOsWindowSwapBuffers();
     PIXEndNamedEvent();
+    if (dbgLeft > 0) { dbgLeft--; fprintf(stderr, "done\n"); fflush(stderr); }
     PIXBeginNamedEvent(0.0f, "Wait for previous frame");
     if (s_frameFence != 0)
     {
@@ -1626,9 +1748,6 @@ void Renderer::Present()
             targetWidth = s_letterbox ? uiFrame[2] : windowWidth;
             targetHeight = s_letterbox ? uiFrame[3] : windowHeight;
         }
-        const int scale = PcSettingsRenderScalePercent();
-        targetWidth = targetWidth * scale / 100;
-        targetHeight = targetHeight * scale / 100;
         if (targetWidth >= kMinimumTargetSize && targetHeight >= kMinimumTargetSize)
             ResizeTvTarget(targetWidth, targetHeight);
     }
@@ -1642,6 +1761,12 @@ void Renderer::Clear(int flags)
 {
     if (!OnRenderThread())
         return;
+    if ((flags & 3) != 0 && s_screen == 0 && !externalTarget && ShaderPipeline::Get().InWorld())
+    {
+        ShaderPipeline::Get().ClearTargets((flags & 2) != 0, (flags & 1) != 0);
+        PcEndPackDraws(true);
+        return;
+    }
     ApplyViewportAndScissor();
     GLbitfield mask = 0;
     if ((flags & 1) != 0)
@@ -1911,6 +2036,9 @@ unsigned int Renderer::GetProgram(int vertexShader, int pixelShader)
     PcGl::Uniform1i(PcGl::GetUniformLocation(prog, "uTexture2"), 2);
     PcGl::Uniform1i(PcGl::GetUniformLocation(prog, "uTexture3"), 3);
     PcGl::Uniform1i(PcGl::GetUniformLocation(prog, "uVertexTexture"), VERTEX_TEXTURE_UNIT);
+    PcGl::Uniform1i(PcGl::GetUniformLocation(prog, "uChunkOffsets"), ShaderTextureUnit_ChunkOffsets);
+    info.chunkOffsetMode = PcGl::GetUniformLocation(prog, "uChunkOffsetMode");
+    info.chunkOffsetValue = 0;
     GLint lighting = PcGl::GetUniformLocation(prog, "uLighting");
     if (lighting >= 0)
         PcGl::Uniform1i(lighting, vertexShader == ePcVertexShader_EntityLighting ? 1 : 0);
@@ -2143,6 +2271,11 @@ void Renderer::ApplyUniforms(int vertexShader, int pixelShader, unsigned int pro
         float forceLod[4] = {(float)s_state.forceLod, 0.0f, 0.0f, 0.0f};
         SetPixelRegisters(PIXEL_REGISTER_FORCE_LOD, 1, forceLod);
     }
+    if (pixelShader == ePcPixelShader_Ui || pixelShader == ePcPixelShader_UiAlphaTest)
+    {
+        float sharp[4] = {sharpText ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f};
+        SetPixelRegisters(PIXEL_REGISTER_SHARP_TEXT, 1, sharp);
+    }
     if (pixelShader == ePcPixelShader_LayeredColourMask)
     {
         SetPixelRegisters(PIXEL_REGISTER_LAYERED, 1, s_state.layeredTextureSize);
@@ -2151,6 +2284,7 @@ void Renderer::ApplyUniforms(int vertexShader, int pixelShader, unsigned int pro
     UploadRegisters();
     GlUseProgram(prog);
     ProgramInfo& info = programs[vertexShader][pixelShader];
+    s_currentProgramInfo = &info;
     GLfloat alphaValue = s_state.alphaTestEnable ? s_state.alphaReference : 0.0f;
     if (info.alphaReference >= 0 && info.alphaValue != alphaValue)
     {
@@ -2199,8 +2333,240 @@ void Renderer::SetupVertexFormat(int vertexShader, unsigned int off)
     }
 }
 
+namespace
+{
+bool s_packDraw = false;
+int s_packVertexShader = -1;
+GLuint s_packCurrentBuffer = 0;
+GLuint s_packTerrainTexture = 0;
+GLuint s_packCurrentQuads = 0;
+GLuint s_packQuadTexture = 0;
+GLuint s_packNoQuads = 0;
+const int PACK_NO_QUADS_COUNT = 65536;
+__thread const unsigned short* s_pendingQuadElements = 0;
+
+void MarkPackStateStale()
+{
+    s_gl.program = -1;
+    s_gl.enabled[eGlCapability_Blend] = -1;
+    s_gl.blendFunc[0] = -1;
+    s_gl.blendFunc[1] = -1;
+    s_gl.frontFace = -1;
+    s_gl.colourMask[0] = -1;
+    s_gl.viewport[0] = -1;
+    s_gl.scissor[0] = -1;
+    s_gl.activeTexture = -1;
+    for (int unit = 0; unit < GL_TEXTURE_UNITS; ++unit)
+        s_gl.textures[unit] = -1;
+}
+
+ShaderAdapter PackAdapter(int vertexShader, bool* supported)
+{
+    *supported = true;
+    switch (vertexShader)
+    {
+    case ePcVertexShader_Terrain:
+        return ShaderAdapter_Terrain;
+    case ePcVertexShader_Standard:
+    case ePcVertexShader_StandardLighting:
+        return ShaderAdapter_Standard;
+    case ePcVertexShader_TexGen:
+        return ShaderAdapter_TexGen;
+    case ePcVertexShader_Entity:
+    case ePcVertexShader_EntityLighting:
+        return ShaderAdapter_Entity;
+    default:
+        *supported = false;
+        return ShaderAdapter_Standard;
+    }
+}
+}
+
+void PcEndPackDraws(bool always)
+{
+    if (always)
+        s_packTerrainUnitsBound = false;
+    if (!s_packDraw && !always)
+        return;
+    s_packDraw = false;
+    s_packVertexShader = -1;
+    PcGl::BindFramebuffer(GL_FRAMEBUFFER, frameBuffers[s_screen]);
+    for (GLuint unit = 0; unit < GL_TEXTURE_UNITS; ++unit)
+        PcGl::BindSampler(unit, 0);
+    MarkPackStateStale();
+}
+
+bool PcPreparePackDraw(int vertexShader, int pixelShader, int primitiveType)
+{
+    ShaderPipeline& pipeline = ShaderPipeline::Get();
+    bool supported = false;
+    const ShaderAdapter adapter = PackAdapter(vertexShader, &supported);
+    if (!pipeline.InWorld() || !supported || s_screen != 0 || externalTarget)
+    {
+        PcEndPackDraws(false);
+        return false;
+    }
+    const ShaderLinkedProgram* program = pipeline.SelectProgram(adapter, pixelShader);
+    ShaderDrawTarget target;
+    if (program == nullptr || !pipeline.PrepareTargets(program, target))
+    {
+        PcEndPackDraws(false);
+        return false;
+    }
+    s_packDraw = true;
+    s_packVertexShader = vertexShader;
+    MarkPackStateStale();
+
+    if (pipeline.InShadow())
+    {
+        PcGl::Viewport(0, 0, target.width, target.height);
+        PcGl::Scissor(0, 0, target.width, target.height);
+    }
+    else
+    {
+        GLint viewport[4];
+        ToTargetRect(s_state.viewport, viewport);
+        PcGl::Viewport(viewport[0], viewport[1], viewport[2], viewport[3]);
+        GLint scissor[4];
+        ToTargetRect(s_state.scissor, scissor);
+        PcGl::Scissor(scissor[0], scissor[1], scissor[2], scissor[3]);
+    }
+
+    const bool colour = s_state.colourWrite[0] || s_state.colourWrite[1] || s_state.colourWrite[2];
+    if (colour)
+        PcGl::ColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    if (target.blendOverride)
+    {
+        if (target.blendEnable)
+        {
+            PcGl::Enable(GL_BLEND);
+            PcGl::BlendFuncSeparate(target.blend[0], target.blend[1], target.blend[2], target.blend[3]);
+        }
+        else
+            PcGl::Disable(GL_BLEND);
+    }
+    for (GLuint buffer = 0; buffer < 8; ++buffer)
+    {
+        if ((target.bufferBlendOff & (1u << buffer)) != 0)
+            PcGl::Disablei(GL_BLEND, buffer);
+    }
+
+    PcGl::UseProgram(program->name);
+    ShaderDrawValues values;
+    const float* fog = vertexRegisters[VERTEX_REGISTER_FOG];
+    const int fogMode = (int)fog[2];
+    values.fogMode = fogMode == 1 ? GL_LINEAR : fogMode == 2 ? 0x0800 : fogMode == 3 ? 0x0801 : 0;
+    values.fogStart = (float)fabs(fog[1]);
+    values.fogEnd = (float)fabs(fog[0]);
+    values.fogDensity = (float)fabs(fog[0]);
+    memcpy(values.fogColor, s_state.fogColour, sizeof(values.fogColor));
+    values.alphaRef = s_state.alphaTestEnable ? s_state.alphaReference : 0.0f;
+    memcpy(values.entityColor, s_state.lerpColour, sizeof(values.entityColor));
+    memcpy(values.colourScale, s_state.colour, sizeof(values.colourScale));
+    values.blendFunc[0] = s_state.blendEnable ? (int)BLEND_FACTORS[s_state.blendSource % 21] : GL_ONE;
+    values.blendFunc[1] = s_state.blendEnable ? (int)BLEND_FACTORS[s_state.blendDestination % 21] : GL_ZERO;
+    values.blendFunc[2] = values.blendFunc[0];
+    values.blendFunc[3] = values.blendFunc[1];
+    memcpy(values.lights, vertexRegisters[VERTEX_REGISTER_LIGHTS], sizeof(values.lights));
+    values.quadVertices = primitiveType == C4JRender::ePrimitiveType_Quads;
+    values.quadData = s_packVertexShader == ePcVertexShader_Terrain && pipeline.CanUseTerrainData();
+    pipeline.ApplyProgram(program, values);
+    return true;
+}
+
+void PcBindPackTerrain(GLuint buffer, int firstVertex)
+{
+    if (!s_packDraw || s_packVertexShader != ePcVertexShader_Terrain || buffer == 0)
+        return;
+    if (s_packTerrainTexture == 0)
+        PcGl::GenTextures(1, &s_packTerrainTexture);
+    if (buffer != s_packBoundBuffer)
+    {
+        PcGl::ActiveTexture(GL_TEXTURE0 + ShaderTextureUnit_TerrainVertices);
+        PcGl::BindTexture(GL_TEXTURE_BUFFER, s_packTerrainTexture);
+        PcGl::TexBuffer(GL_TEXTURE_BUFFER, GL_RGBA16I, buffer);
+    }
+    GLuint quads = s_packCurrentQuads;
+    if (quads == 0)
+    {
+        if (s_packNoQuads == 0)
+        {
+            std::vector<unsigned short> zeros(PACK_NO_QUADS_COUNT, 0);
+            PcGl::GenBuffers(1, &s_packNoQuads);
+            PcGl::BindBuffer(GL_TEXTURE_BUFFER, s_packNoQuads);
+            PcGl::BufferData(GL_TEXTURE_BUFFER, PACK_NO_QUADS_COUNT * sizeof(unsigned short), &zeros[0],
+                             GL_STATIC_DRAW);
+        }
+        quads = s_packNoQuads;
+    }
+    if (s_packQuadTexture == 0)
+        PcGl::GenTextures(1, &s_packQuadTexture);
+    if (buffer != s_packBoundBuffer || quads != s_packBoundQuads)
+    {
+        PcGl::ActiveTexture(GL_TEXTURE0 + ShaderTextureUnit_QuadData);
+        PcGl::BindTexture(GL_TEXTURE_BUFFER, s_packQuadTexture);
+        PcGl::TexBuffer(GL_TEXTURE_BUFFER, GL_R16UI, quads);
+        s_packBoundBuffer = buffer;
+        s_packBoundQuads = quads;
+    }
+    if (!s_packTerrainUnitsBound)
+    {
+        ShaderPipeline::Get().BindTerrainData(s_packTerrainTexture, s_packQuadTexture);
+        s_packTerrainUnitsBound = true;
+    }
+    ShaderPipeline::Get().SetFirstVertex(firstVertex);
+    s_gl.activeTexture = -1;
+}
+
+void PcSetQuadElements(const unsigned short* elements)
+{
+    s_pendingQuadElements = elements;
+}
+
+namespace
+{
+void RecordQuadElements(Renderer::CommandBuffer* buf, unsigned int firstVertex, int numVertices, const unsigned char* layers,
+                        const unsigned short* elements)
+{
+    if (buf->mVertexType != ePcVertexShader_Terrain || (elements == 0 && buf->mQuadElements.empty()))
+        return;
+    buf->mQuadElements.resize(firstVertex / 4, 0);
+    const int quads = numVertices / 4;
+    if (elements == 0)
+    {
+        buf->mQuadElements.resize(buf->mQuadElements.size() + quads, 0);
+        return;
+    }
+    if (layers == 0)
+    {
+        buf->mQuadElements.insert(buf->mQuadElements.end(), elements, elements + quads);
+        return;
+    }
+    for (unsigned char layer = 0; layer < 7; ++layer)
+    {
+        for (int quad = 0; quad < quads; ++quad)
+        {
+            if (layers[quad] == layer)
+                buf->mQuadElements.push_back(elements[quad]);
+        }
+    }
+}
+
+void UploadQuadElements(Renderer::CommandBuffer* buf)
+{
+    if (buf->mQuadBuffer != 0 || buf->mQuadElements.empty())
+        return;
+    PcGl::GenBuffers(1, &buf->mQuadBuffer);
+    PcGl::BindBuffer(GL_TEXTURE_BUFFER, buf->mQuadBuffer);
+    PcGl::BufferData(GL_TEXTURE_BUFFER, buf->mQuadElements.size() * sizeof(unsigned short), &buf->mQuadElements[0],
+                     GL_STATIC_DRAW);
+    std::vector<unsigned short>().swap(buf->mQuadElements);
+}
+}
+
 void Renderer::IssueDraw(int primitiveType, int firstVertex, int numVertices)
 {
+    PcBindPackTerrain(s_packCurrentBuffer, firstVertex);
     PIXBeginNamedEvent(0.0f, "GL draw");
     switch (primitiveType)
     {
@@ -2235,6 +2601,8 @@ void Renderer::DrawVertices(C4JRender::ePrimitiveType primitiveType, int numVert
                             unsigned char* layers)
 {
     Context& ctx = getContext();
+    const unsigned short* quadElements = s_pendingQuadElements;
+    s_pendingQuadElements = 0;
     if (ctx.mRecordingBuffer != 0)
     {
         int recordedType = vertexType;
@@ -2252,6 +2620,7 @@ void Renderer::DrawVertices(C4JRender::ePrimitiveType primitiveType, int numVert
             memcpy(mat.mMatrix, MatrixGet(3), sizeof(mat.mMatrix));
             mat.mOffset = 0;
             mat.mCount = 0;
+            memset(mat.mBucket, 0, sizeof(mat.mBucket));
             buf->mCommands.push_back(mat);
             ctx.mMatrixDirty[3] = false;
         }
@@ -2260,6 +2629,17 @@ void Renderer::DrawVertices(C4JRender::ePrimitiveType primitiveType, int numVert
         draw.mIsMatrix = false;
         draw.mOffset = (unsigned int)buf->mVertices.size();
         draw.mCount = numVertices;
+        memset(draw.mBucket, 0, sizeof(draw.mBucket));
+        if (layers == 0)
+            draw.mBucket[0] = numVertices;
+        else
+        {
+            for (int quad = 0; quad < numVertices / 4; ++quad)
+            {
+                if (layers[quad] < 7)
+                    draw.mBucket[layers[quad]] += 4;
+            }
+        }
         if (s_displayMode != ePcDisplay_Headless && vertices != 0)
         {
             const unsigned char* src = static_cast<const unsigned char*>(vertices);
@@ -2277,6 +2657,7 @@ void Renderer::DrawVertices(C4JRender::ePrimitiveType primitiveType, int numVert
                     }
                 }
             }
+            RecordQuadElements(buf, draw.mOffset / stride, numVertices, layers, quadElements);
         }
         buf->mCommands.push_back(draw);
         return;
@@ -2313,8 +2694,137 @@ void Renderer::DrawVertices(C4JRender::ePrimitiveType primitiveType, int numVert
     ApplyUniforms(vertexShader, pixelShader, prog);
     BindTextures();
     ApplyRenderState();
+    PcPreparePackDraw(vertexShader, pixelShader, primitiveType);
     SetupVertexFormat(vertexShader, 0);
+    s_packCurrentBuffer = streamBuffer;
+    s_packCurrentQuads = 0;
     IssueDraw(primitiveType, off / stride, numVertices);
+}
+
+static void drawRuns(int* first, int* count, int n)
+{
+    PcBindPackTerrain(s_packCurrentBuffer, first[0]);
+    GLsizei counts[7];
+    const void* starts[7];
+    GLint bases[7];
+    for (int i = 0; i < n; ++i)
+    {
+        counts[i] = count[i] / 4 * 6;
+        starts[i] = 0;
+        bases[i] = first[i];
+    }
+    PIXBeginNamedEvent(0.0f, "GL draw");
+    PcGl::MultiDrawElementsBaseVertex(GL_TRIANGLES, counts, GL_UNSIGNED_INT, starts, n, bases);
+    PIXEndNamedEvent();
+}
+
+namespace
+{
+int FaceRuns(const Renderer::CommandBuffer::Command& command, int firstVertex, unsigned char mask, int* first,
+             int* count, int& drawnVertices)
+{
+    if ((mask & 0x7f) == 0x7f)
+    {
+        first[0] = firstVertex;
+        count[0] = static_cast<int>(command.mCount);
+        drawnVertices += count[0];
+        return 1;
+    }
+    int runs = 0;
+    int at = firstVertex;
+    for (int bucket = 0; bucket < 7; ++bucket)
+    {
+        const int vertices = static_cast<int>(command.mBucket[bucket]);
+        if (vertices == 0)
+            continue;
+        if ((mask & (1 << bucket)) != 0)
+        {
+            if (runs > 0 && first[runs - 1] + count[runs - 1] == at)
+                count[runs - 1] += vertices;
+            else
+            {
+                first[runs] = at;
+                count[runs] = vertices;
+                ++runs;
+            }
+            drawnVertices += vertices;
+        }
+        at += vertices;
+    }
+    return runs;
+}
+
+void SetChunkOffsetMode(bool arena)
+{
+    if (s_packDraw)
+    {
+        ShaderPipeline::Get().SetChunkOffsetMode(arena ? 1 : 0);
+        return;
+    }
+    ProgramInfo* info = s_currentProgramInfo;
+    if (info == nullptr || info->chunkOffsetMode < 0 || info->chunkOffsetValue == (arena ? 1 : 0))
+        return;
+    info->chunkOffsetValue = arena ? 1 : 0;
+    PcGl::Uniform1i(info->chunkOffsetMode, info->chunkOffsetValue);
+}
+
+void BindTerrainArena(int arena)
+{
+    PcTerrainArenas& arenas = PcTerrainArenas::Get();
+    GlBindVertexArray(arenas.VertexArray(arena));
+    PcGl::ActiveTexture(GL_TEXTURE0 + ShaderTextureUnit_ChunkOffsets);
+    PcGl::BindTexture(GL_TEXTURE_BUFFER, arenas.OffsetTexture(arena));
+    PcGl::BindSampler(ShaderTextureUnit_ChunkOffsets, 0);
+    s_gl.activeTexture = -1;
+    s_packCurrentBuffer = arenas.VertexBuffer(arena);
+    s_packCurrentQuads = arenas.QuadBuffer(arena);
+    SetChunkOffsetMode(true);
+}
+
+bool UploadToArena(Renderer::CommandBuffer* buf, unsigned int stride)
+{
+    if (stride != static_cast<unsigned int>(PcTerrainArenas::kVertexBytes) || buf->mVertices.empty())
+        return false;
+    const int vertexCount = static_cast<int>(buf->mVertices.size() / stride);
+    PcTerrainArenas& arenas = PcTerrainArenas::Get();
+    PcTerrainSlot slot;
+    const bool allocated = arenas.Allocate(vertexCount, quadIndexBuffer, slot);
+    s_gl.vertexArray = -1;
+    s_gl.arrayBuffer = -1;
+    if (!allocated)
+        return false;
+    arenas.Upload(slot, &buf->mVertices[0], vertexCount, &buf->mCommands[0].mMatrix[12],
+                  buf->mQuadElements.empty() ? nullptr : &buf->mQuadElements[0],
+                  static_cast<int>(buf->mQuadElements.size()));
+    buf->mSlot = slot;
+    std::vector<unsigned char>().swap(buf->mVertices);
+    std::vector<unsigned short>().swap(buf->mQuadElements);
+    return true;
+}
+
+void FlushTerrainBatches()
+{
+    if (s_terrainBatchArenas.empty())
+        return;
+    for (int arena : s_terrainBatchArenas)
+    {
+        TerrainBatch& batch = s_terrainBatches[arena];
+        if (batch.counts.empty())
+            continue;
+        BindTerrainArena(arena);
+        PcBindPackTerrain(s_packCurrentBuffer, 0);
+        if (s_terrainBatchStarts.size() < batch.counts.size())
+            s_terrainBatchStarts.resize(batch.counts.size(), nullptr);
+        PIXBeginNamedEvent(0.0f, "GL draw");
+        PcGl::MultiDrawElementsBaseVertex(GL_TRIANGLES, &batch.counts[0], GL_UNSIGNED_INT, &s_terrainBatchStarts[0],
+                                          static_cast<GLsizei>(batch.counts.size()), &batch.bases[0]);
+        PIXEndNamedEvent();
+        batch.counts.clear();
+        batch.bases.clear();
+    }
+    s_terrainBatchArenas.clear();
+    SetChunkOffsetMode(false);
+}
 }
 
 void Renderer::RenderCommandBuffer(CommandBuffer* buf, int vertexShader, bool bApplyMatrix)
@@ -2324,6 +2834,30 @@ void Renderer::RenderCommandBuffer(CommandBuffer* buf, int vertexShader, bool bA
     const unsigned int stride = VERTEX_STRIDES[vertexShader];
     if (vertexShader == ePcVertexShader_Terrain && buf->mSingleMatrix)
     {
+        const bool quads = buf->mPrimitiveType == C4JRender::ePrimitiveType_Quads;
+        const unsigned char mask = quads ? faceMask : 0xff;
+        if (buf->mSlot.arena >= 0 || (quads && buf->mVertexArray == 0 && UploadToArena(buf, stride)))
+        {
+            BindTerrainArena(buf->mSlot.arena);
+            for (unsigned int i = 1; i < buf->mCommands.size(); ++i)
+            {
+                const CommandBuffer::Command& cmd = buf->mCommands[i];
+                if (cmd.mCount == 0)
+                    continue;
+                int first[7];
+                int count[7];
+                int drawn = 0;
+                const int runs = FaceRuns(cmd, buf->mSlot.firstVertex + static_cast<int>(cmd.mOffset / stride),
+                                          mask, first, count, drawn);
+                mVerticesDrawnThisFrame += drawn;
+                if (runs == 1)
+                    IssueDraw(buf->mPrimitiveType, first[0], count[0]);
+                else if (runs > 1)
+                    drawRuns(first, count, runs);
+            }
+            SetChunkOffsetMode(false);
+            return;
+        }
         if (buf->mVertexArray == 0)
         {
             PIXBeginNamedEvent(0.0f, "GL command buffer upload");
@@ -2348,13 +2882,23 @@ void Renderer::RenderCommandBuffer(CommandBuffer* buf, int vertexShader, bool bA
             PIXEndNamedEvent();
         }
         GlBindVertexArray(buf->mVertexArray);
+        UploadQuadElements(buf);
+        s_packCurrentBuffer = buf->mBuffer;
+        s_packCurrentQuads = buf->mQuadBuffer;
         for (unsigned int i = 1; i < buf->mCommands.size(); ++i)
         {
             const CommandBuffer::Command& cmd = buf->mCommands[i];
             if (cmd.mCount == 0)
                 continue;
-            IssueDraw(buf->mPrimitiveType, cmd.mOffset / stride, cmd.mCount);
-            mVerticesDrawnThisFrame += cmd.mCount;
+            int first[7];
+            int count[7];
+            int drawn = 0;
+            const int runs = FaceRuns(cmd, static_cast<int>(cmd.mOffset / stride), mask, first, count, drawn);
+            mVerticesDrawnThisFrame += drawn;
+            if (runs == 1)
+                IssueDraw(buf->mPrimitiveType, first[0], count[0]);
+            else if (runs > 1)
+                drawRuns(first, count, runs);
         }
         return;
     }
@@ -2370,6 +2914,9 @@ void Renderer::RenderCommandBuffer(CommandBuffer* buf, int vertexShader, bool bA
     else
         GlBindBuffer(GL_ARRAY_BUFFER, buf->mBuffer);
     SetupVertexFormat(vertexShader, 0);
+    UploadQuadElements(buf);
+    s_packCurrentBuffer = buf->mBuffer;
+    s_packCurrentQuads = buf->mQuadBuffer;
 
     bool matrixPushed = false;
     for (unsigned int i = 0; i < buf->mCommands.size(); ++i)
@@ -2449,6 +2996,10 @@ void Renderer::DeleteCommandBuffer(CommandBuffer* buf)
         mPendingBufferDeletes.push_back(buf->mBuffer);
     if (buf->mVertexArray != 0)
         mPendingVertexArrayDeletes.push_back(buf->mVertexArray);
+    if (buf->mQuadBuffer != 0)
+        mPendingBufferDeletes.push_back(buf->mQuadBuffer);
+    if (buf->mSlot.arena >= 0)
+        PcTerrainArenas::Get().Release(buf->mSlot);
     __atomic_sub_fetch(&totalCommandBufferBytes, buf->mCountedBytes, __ATOMIC_RELAXED);
     delete buf;
 }
@@ -2536,7 +3087,7 @@ void Renderer::CBuffEnd()
     LeaveCriticalSection(&mCommandBufferMutex);
 }
 
-bool Renderer::CBuffCall(int id, bool bApplyMatrix, unsigned char)
+bool Renderer::CBuffCall(int id, bool bApplyMatrix, unsigned char layerMask)
 {
     if (id < 0 || id >= kMaxCommandBufferIds)
         return false;
@@ -2576,7 +3127,10 @@ bool Renderer::CBuffCall(int id, bool bApplyMatrix, unsigned char)
     ApplyUniforms(vertexShader, pixelShader, prog);
     BindTextures();
     ApplyRenderState();
+    PcPreparePackDraw(vertexShader, pixelShader, buf->mPrimitiveType);
+    faceMask = layerMask;
     RenderCommandBuffer(buf, vertexShader, bApplyMatrix);
+    faceMask = 0xff;
     if (bApplyMatrix)
     {
         float mat[4][4];
@@ -2589,7 +3143,7 @@ bool Renderer::CBuffCall(int id, bool bApplyMatrix, unsigned char)
     return true;
 }
 
-void Renderer::CBuffCallRun(const int* ids, int n)
+void Renderer::CBuffCallRun(const int* ids, int n, const unsigned char* masks)
 {
     const int kIdsPerLock = 128;
     bool prepared = false;
@@ -2629,6 +3183,7 @@ void Renderer::CBuffCallRun(const int* ids, int n)
             if (!prepared || !chunkSection || vertexShader != preparedVertexShader
                 || pixelShader != preparedPixelShader)
             {
+                FlushTerrainBatches();
                 float identity[16];
                 SetIdentity(identity);
                 SetVertexRegisters(VERTEX_REGISTER_WORLD_VIEW2, 4, identity);
@@ -2636,14 +3191,44 @@ void Renderer::CBuffCallRun(const int* ids, int n)
                 ApplyUniforms(vertexShader, pixelShader, prog);
                 BindTextures();
                 ApplyRenderState();
+                PcPreparePackDraw(vertexShader, pixelShader, buf->mPrimitiveType);
                 preparedVertexShader = vertexShader;
                 preparedPixelShader = pixelShader;
             }
-            RenderCommandBuffer(buf, vertexShader, false);
+            faceMask = masks != 0 ? masks[i] : 0xff;
+            const unsigned int stride = VERTEX_STRIDES[vertexShader];
+            if (chunkSection && buf->mPrimitiveType == C4JRender::ePrimitiveType_Quads
+                && (buf->mSlot.arena >= 0 || (buf->mVertexArray == 0 && UploadToArena(buf, stride))))
+            {
+                TerrainBatch& batch = s_terrainBatches[buf->mSlot.arena];
+                if (batch.counts.empty())
+                    s_terrainBatchArenas.push_back(buf->mSlot.arena);
+                for (unsigned int c = 1; c < buf->mCommands.size(); ++c)
+                {
+                    const CommandBuffer::Command& cmd = buf->mCommands[c];
+                    if (cmd.mCount == 0)
+                        continue;
+                    int first[7];
+                    int count[7];
+                    int drawn = 0;
+                    const int runs = FaceRuns(cmd, buf->mSlot.firstVertex + static_cast<int>(cmd.mOffset / stride),
+                                              faceMask, first, count, drawn);
+                    mVerticesDrawnThisFrame += drawn;
+                    for (int run = 0; run < runs; ++run)
+                    {
+                        batch.counts.push_back(static_cast<GLsizei>(count[run] / 4 * 6));
+                        batch.bases.push_back(first[run]);
+                    }
+                }
+            }
+            else
+                RenderCommandBuffer(buf, vertexShader, false);
+            faceMask = 0xff;
             prepared = chunkSection;
         }
         LeaveCriticalSection(&mCommandBufferMutex);
     }
+    FlushTerrainBatches();
 }
 
 void Renderer::CBuffTick()
@@ -2736,6 +3321,23 @@ void Renderer::TextureFree(int tex)
     e.mUsed = false;
     e.mPendingLevels.clear();
     LeaveCriticalSection(&mTextureMutex);
+}
+
+void Renderer::TextureSize(int tex, int* width, int* height)
+{
+    *width = 0;
+    *height = 0;
+    if (tex < 0 || tex >= kMaxTextures || !mTextures[tex].mUsed)
+        return;
+    *width = mTextures[tex].mWidth;
+    *height = mTextures[tex].mHeight;
+}
+
+unsigned int Renderer::TextureGlName(int tex)
+{
+    if (tex < 0 || tex >= kMaxTextures || !mTextures[tex].mUsed)
+        return 0;
+    return mTextures[tex].mName;
 }
 
 void Renderer::TextureBind(int tex)

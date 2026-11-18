@@ -1,5 +1,6 @@
 #include "game/ui/UIComponent_Tooltips.hpp"
 #ifdef MINECRAFT_PC
+#include "game/core/Options.hpp"
 #include "platform/pc/PcInput.hpp"
 #include "platform/pc/PcModViews.hpp"
 #include "platform/pc/PcNativeMod.h"
@@ -296,6 +297,8 @@ void UIComponent_Tooltips::render(int width, int height, C4JRender::eViewportTyp
                 return;
 #ifdef MINECRAFT_PC
             if (PcNativeModsHudHidden(PC_NATIVE_HUD_HINTS))
+                return;
+            if (Minecraft::GetInstance()->mOptions->mHideGui)
                 return;
 #endif
         }

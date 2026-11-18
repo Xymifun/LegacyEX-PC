@@ -1,4 +1,7 @@
 #include "game/core/MasterGameMode.hpp"
+#ifdef MINECRAFT_PC
+#include "platform/pc/PcTextureOverride.hpp"
+#endif
 
 #include <cstdio>
 
@@ -1887,6 +1890,9 @@ void MasterGameMode::Tick()
             break;
 
         mTexturePackId = Minecraft::GetInstance()->mTexturePackRepository->getSelected()->getId();
+#ifdef MINECRAFT_PC
+        mTexturePackId = PcTextureOverrideWorldPack(mTexturePackId);
+#endif
         mPlayedRuleGroups.clear();
         mRemainingRuleGroups.clear();
         mRemainingRuleGroups.insert(mRemainingRuleGroups.end(), mPlaylist.begin(), mPlaylist.end());

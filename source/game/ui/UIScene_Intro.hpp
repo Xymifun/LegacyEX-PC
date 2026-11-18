@@ -20,6 +20,9 @@ public:
     virtual bool hasFocus(int sceneType);
     virtual void handleGainFocus(bool hadFocus);
     virtual void handleInput(int playerId, int action, bool repeat, bool pressed, bool released, bool& handled);
+#ifdef MINECRAFT_PC
+    virtual bool fillsWindowBars() { return true; }
+#endif
     virtual void handleReload();
     virtual void handleAnimationEnd();
     virtual void handleTouchInput(unsigned int playerId, int touchX, int touchY, int touchBox, bool pressed,

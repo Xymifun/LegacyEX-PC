@@ -23,6 +23,7 @@
 #include "game/core/GameType.hpp"
 #include "game/core/GhostController.hpp"
 #ifdef MINECRAFT_PC
+#include "game/core/Options.hpp"
 #include "platform/pc/PcModViews.hpp"
 #include "platform/pc/PcNativeMod.h"
 #include "platform/pc/PcNativeMods.hpp"
@@ -1493,7 +1494,11 @@ void UIScene_HUD::updateFrameTick()
     if (gApp.GetGameStarted() == 0 || gConsoleUIController.GetMenuDisplayed(pad) != 0
         || gConsoleUIController.IsSceneInStack(pad, EUIScene_ConnectingProgress) != 0
         || gApp.GetXuiAction(pad) == eXuiAction_AutoSave
-        || GameSettings::GetGameSettings(pad, eGameSetting_DisplayHUD) == 0 || player == 0)
+        || GameSettings::GetGameSettings(pad, eGameSetting_DisplayHUD) == 0 || player == 0
+#ifdef MINECRAFT_PC
+        || Minecraft::GetInstance()->mOptions->mHideGui
+#endif
+    )
     {
         SetVisible(false);
     }

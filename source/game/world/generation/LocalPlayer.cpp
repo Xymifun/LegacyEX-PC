@@ -127,7 +127,10 @@
 #include "platform/pc/PcModViews.hpp"
 #include "platform/pc/PcNativeMods.hpp"
 #include "game/ui/BrewingStandMenu.hpp"
+#include "game/ui/AnvilMenu.hpp"
+#include "game/ui/BeaconMenu.hpp"
 #include "game/ui/ChestMenu.hpp"
+#include "game/ui/EnchantmentMenu.hpp"
 #include "game/ui/CraftingMenu.hpp"
 #include "game/ui/FurnaceMenu.hpp"
 #include "game/ui/HopperMenu.hpp"
@@ -570,7 +573,9 @@ int LocalPlayer::openContainer(boost::shared_ptr<Container> container)
             menu = new TrapMenu(mInventory, container);
         else if (typeId == ClientboundContainerOpenPacket::SHULKER_BOX)
             menu = new ShulkerBoxMenu(mInventory, container, self);
-        else if (typeId != ClientboundContainerOpenPacket::BEACON)
+        else if (typeId == ClientboundContainerOpenPacket::BEACON)
+            menu = new BeaconMenu(mInventory, container);
+        else
             menu = new ChestMenu(mInventory, container, self);
         if (menu != NULL)
         {
@@ -616,10 +621,19 @@ int LocalPlayer::startBlockInteraction(InteractionObject& interaction)
 {
     int result;
 #ifdef MINECRAFT_PC
+    int hiddenType = interaction.getTypeId(false);
     if (PcNativeModsHideMenus() && mUserIndex == 0
-        && interaction.getTypeId(false) == ClientboundContainerOpenPacket::WORKBENCH)
+        && (hiddenType == ClientboundContainerOpenPacket::WORKBENCH || hiddenType == ClientboundContainerOpenPacket::ENCHANTMENT
+            || hiddenType == ClientboundContainerOpenPacket::REPAIR_TABLE))
     {
-        AbstractContainerMenu* menu = new CraftingMenu(mInventory, mLevel, BlockPos((int)mX, (int)mY, (int)mZ));
+        BlockPos at((int)mX, (int)mY, (int)mZ);
+        AbstractContainerMenu* menu;
+        if (hiddenType == ClientboundContainerOpenPacket::ENCHANTMENT)
+            menu = new EnchantmentMenu(mInventory, mLevel, at);
+        else if (hiddenType == ClientboundContainerOpenPacket::REPAIR_TABLE)
+            menu = new AnvilMenu(mInventory, mLevel, at, boost::dynamic_pointer_cast<Player>(shared_from_this()));
+        else
+            menu = new CraftingMenu(mInventory, mLevel, at);
         if (hiddenMenu != NULL && mContainerMenu == hiddenMenu)
             mContainerMenu = mInventoryMenu;
         delete hiddenMenu;
@@ -732,6 +746,7 @@ float LocalPlayer::tickHeadTurn(float yRot, float xRot)
 
 #ifdef MINECRAFT_PC
 bool PcInputKeyboardStrafing();
+bool PcInputModSprintHeld();
 #endif
 
 void LocalPlayer::aiStep()
@@ -864,6 +879,13 @@ void LocalPlayer::aiStep()
         stopForDirection = false;
 
     bool keepSprintForInput = mInput->mMoveForward >= 0.8f && foodAllowsSprinting;
+#ifdef MINECRAFT_PC
+    if (mUserIndex == gProfile->GetPrimaryPad() && PcInputModSprintHeld() && foodAllowsSprinting)
+    {
+        stopForDirection = false;
+        keepSprintForInput = true;
+    }
+#endif
     if (isSprinting() && mOnGround && stopForDirection)
         setSprinting(false);
 

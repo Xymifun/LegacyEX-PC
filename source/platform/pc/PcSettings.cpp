@@ -14,13 +14,11 @@ namespace
 {
 const int DEFAULT_FOV = 70;
 const int FRAMERATE_LIMITS[kPcFramerateSteps] = {-1, 30, 60, 90, 120, 144, 165, 240, 300, 0};
-const int kRenderScales[kPcRenderScaleSteps] = {50, 60, 70, 80, 90, 100};
 const unsigned long long NANOSECONDS_PER_SECOND = 1000000000ULL;
 const unsigned long long SPIN_NANOSECONDS = 2000000ULL;
 
 int s_fov = DEFAULT_FOV;
 int framerateStep = 0;
-int s_renderScaleStep = kPcRenderScaleSteps - 1;
 int renderDistance = kPcRenderDistanceDefault;
 int serverDistance = kPcRenderDistanceMaximum;
 int simulationDistance = kPcSimulationDistanceDefault;
@@ -37,6 +35,10 @@ bool proximityChat = false;
 int hostProximity = kPcHostProximityUsersChoose;
 int hostProximityRange = 0;
 int proximityRange = kPcProximityRangeDefault;
+bool textureOverride = false;
+unsigned int textureOverridePack = 0;
+bool defaultMusic = false;
+bool miniGameMusicOverride = false;
 bool s_vsyncApplied = true;
 unsigned long long nextFrame = 0;
 
@@ -76,6 +78,14 @@ void PcSettingsLoad()
             hostProximity = Clamp(v, 0, kPcHostProximityCount - 1);
         else if (sscanf(line, "hostproximityrange=%d", &v) == 1)
             hostProximityRange = v == 0 ? 0 : Clamp(v, kPcProximityRangeMinimum, kPcProximityRangeMaximum);
+        else if (sscanf(line, "minigamemusicoverride=%d", &v) == 1)
+            miniGameMusicOverride = v != 0;
+        else if (sscanf(line, "defaultmusic=%d", &v) == 1)
+            defaultMusic = v != 0;
+        else if (sscanf(line, "textureoverride=%d", &v) == 1)
+            textureOverride = v != 0;
+        else if (sscanf(line, "textureoverridepack=%u", &textureOverridePack) == 1)
+            continue;
         else if (sscanf(line, "proximitychat=%d", &v) == 1)
             proximityChat = v != 0;
         else if (sscanf(line, "proximityrange=%d", &v) == 1)
@@ -104,12 +114,6 @@ void PcSettingsLoad()
             s_panorama = Clamp(v, 0, kPcPanoramaCount - 1);
         else if (sscanf(line, "simulation=%d", &v) == 1)
             simulationDistance = Clamp(v, kPcSimulationDistanceMinimum, kPcSimulationDistanceMaximum);
-        else if (sscanf(line, "renderscale=%d", &v) == 1)
-        {
-            s_renderScaleStep = 0;
-            while (s_renderScaleStep < kPcRenderScaleSteps - 1 && kRenderScales[s_renderScaleStep] < v)
-                ++s_renderScaleStep;
-        }
     }
     fclose(fp);
     if (!waterAndLavaSaved && (s_goldenAge & kPcGoldenAgeBlocks) != 0)
@@ -122,9 +126,9 @@ void PcSettingsSave()
     if (fp == 0)
         return;
     fprintf(fp,
-            "fov=%d\nframerate=%d\nrenderscale=%d\nrenderdistance=%d\nsimulation=%d\nglideghost=%d\nserverdistance=%d\n"
+            "fov=%d\nframerate=%d\nrenderdistance=%d\nsimulation=%d\nglideghost=%d\nserverdistance=%d\n"
             "goldenage=%d\ngoldenagegroups=6\ntitlelogo=%d\ntutorial=%d\nmenupanorama=%d\n",
-            s_fov, framerateStep, kRenderScales[s_renderScaleStep], renderDistance, simulationDistance,
+            s_fov, framerateStep, renderDistance, simulationDistance,
             s_glideGhostHidden ? 0 : 1, serverDistance, s_goldenAge, titleLogo, tutorialVersion,
             s_panorama);
     fprintf(fp,
@@ -132,6 +136,8 @@ void PcSettingsSave()
             "hostproximityrange=%d\nvoicevolume=%d\n",
             voiceInput.c_str(), micVolume, voiceMode, proximityChat ? 1 : 0, proximityRange, hostProximity,
             hostProximityRange, voiceVolume);
+    fprintf(fp, "textureoverride=%d\ntextureoverridepack=%u\ndefaultmusic=%d\nminigamemusicoverride=%d\n",
+            textureOverride ? 1 : 0, textureOverridePack, defaultMusic ? 1 : 0, miniGameMusicOverride ? 1 : 0);
     fclose(fp);
 }
 
@@ -139,7 +145,6 @@ void PcSettingsReset()
 {
     s_fov = DEFAULT_FOV;
     framerateStep = 0;
-    s_renderScaleStep = kPcRenderScaleSteps - 1;
     renderDistance = kPcRenderDistanceDefault;
     simulationDistance = kPcSimulationDistanceDefault;
     s_goldenAge = 0;
@@ -179,6 +184,46 @@ void PcSettingsSetHostProximity(int mode)
 int PcSettingsHostProximityRange()
 {
     return hostProximityRange;
+}
+
+bool PcSettingsTextureOverride()
+{
+    return textureOverride;
+}
+
+void PcSettingsSetTextureOverride(bool on)
+{
+    textureOverride = on;
+}
+
+unsigned int PcSettingsTextureOverridePack()
+{
+    return textureOverridePack;
+}
+
+void PcSettingsSetTextureOverridePack(unsigned int packId)
+{
+    textureOverridePack = packId;
+}
+
+bool PcSettingsDefaultMusic()
+{
+    return defaultMusic;
+}
+
+void PcSettingsSetDefaultMusic(bool on)
+{
+    defaultMusic = on;
+}
+
+bool PcSettingsMiniGameMusicOverride()
+{
+    return miniGameMusicOverride;
+}
+
+void PcSettingsSetMiniGameMusicOverride(bool on)
+{
+    miniGameMusicOverride = on;
 }
 
 void PcSettingsSetHostProximityRange(int n)
@@ -305,26 +350,6 @@ int PcSettingsFramerateLimit(int s)
 bool PcSettingsVsync()
 {
     return PcSettingsFramerateLimit(framerateStep) < 0;
-}
-
-int PcSettingsRenderScaleStep()
-{
-    return s_renderScaleStep;
-}
-
-void PcSettingsSetRenderScaleStep(int step)
-{
-    s_renderScaleStep = Clamp(step, 0, kPcRenderScaleSteps - 1);
-}
-
-int PcSettingsRenderScale(int step)
-{
-    return kRenderScales[Clamp(step, 0, kPcRenderScaleSteps - 1)];
-}
-
-int PcSettingsRenderScalePercent()
-{
-    return kRenderScales[s_renderScaleStep];
 }
 
 int PcSettingsRenderDistance()

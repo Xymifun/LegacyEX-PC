@@ -47,6 +47,8 @@ const BindingInfo kBindings[ePcKey_Count] = {
     {"command", ePcKeySection_Standard, -1, 0, L"Open Command", 0xBF},
     {"pushtotalk", ePcKeySection_Standard, -1, 0, L"Push to Talk", 'V'},
     {"screenshot", ePcKeySection_Standard, -1, 0, L"Take Screenshot", 0x71},
+    {"hidehud", ePcKeySection_Standard, -1, 0, L"Hide HUD", 0x70},
+    {"takeeverything", ePcKeySection_Standard, -1, IDS_TOOLTIPS_TAKE_EVERYTHING, 0, 'Z'},
     {"hotbar1", ePcKeySection_Hotbar, -1, 0, L"Hotbar Slot 1", '1'},
     {"hotbar2", ePcKeySection_Hotbar, -1, 0, L"Hotbar Slot 2", '2'},
     {"hotbar3", ePcKeySection_Hotbar, -1, 0, L"Hotbar Slot 3", '3'},

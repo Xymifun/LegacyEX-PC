@@ -18,6 +18,13 @@ class FJ_Base : public FJ_FuiNode
     friend class fuiRenderNodeTimeline;
 
 public:
+#ifdef MINECRAFT_PC
+    void PcSetNavUpDown(const std::string& up, const std::string& down)
+    {
+        m_navUpName = up;
+        m_navDownName = down;
+    }
+#endif
     explicit FJ_Base(fuiRenderNode* renderNode);
     virtual ~FJ_Base();
     FJ_Base* getObjListParent();

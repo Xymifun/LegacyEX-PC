@@ -52,6 +52,9 @@ public:
     void normal(float x, float y, float z);
     void boneIndex(int index);
     void bucket(int index);
+#ifdef MINECRAFT_PC
+    void quadElement(int element);
+#endif
 
     void vertex(float x, float y, float z);
     void vertexNoBounds(float x, float y, float z);
@@ -97,6 +100,10 @@ private:
 
     arrayWithLength<int>* mRawBuffer;
     arrayWithLength<unsigned char>* mBuckets;
+#ifdef MINECRAFT_PC
+    arrayWithLength<unsigned short>* mQuadElements;
+    unsigned short mQuadElement;
+#endif
     int mVertexCount;
     float mU;
     float mV;

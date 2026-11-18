@@ -1,6 +1,8 @@
 #include "platform/pc/PcInput.hpp"
 
+#include "platform/pc/PcChat.hpp"
 #include "platform/pc/PcDebugOverlay.hpp"
+#include "platform/pc/PcTextKeyboard.hpp"
 #include "platform/pc/PcDisplay.hpp"
 #include "platform/pc/PcKeyBindings.hpp"
 #include "platform/wiiu/CInput.hpp"
@@ -74,7 +76,7 @@ const KeyBinding kKeyBindings[] = {
     {'E', {0, VPAD_BUTTON_X, 0}},
     {'C', {0, VPAD_BUTTON_Y, 0}},
     {kKeyTab, {0, VPAD_BUTTON_MINUS, 0}},
-    {'Z', {0, VPAD_BUTTON_L, VPAD_BUTTON_L}},
+    {'Z', {0, VPAD_BUTTON_L, 0}},
     {'X', {0, VPAD_BUTTON_R, VPAD_BUTTON_R}},
     {'R', {0, VPAD_BUTTON_ZL, VPAD_BUTTON_ZL}},
     {'F', {0, VPAD_BUTTON_ZR, VPAD_BUTTON_ZR}},
@@ -107,6 +109,14 @@ bool s_captured = false;
 bool s_focused = true;
 bool s_textEntry = false;
 uint32_t s_heldAfterTextEntry = 0;
+
+const unsigned long long SELECT_HOLD_NANOSECONDS = 500000000ULL;
+unsigned long long selectStart = 0;
+bool selectInGame = false;
+bool selectChatSent = false;
+bool padChatRequest = false;
+uint32_t chatPadPrev = 0;
+uint32_t chatHeld = 0;
 uint32_t s_proHeldAfterTextEntry[kPadSlots];
 bool s_logInput = false;
 unsigned long long s_inputFrame = 0;
@@ -147,6 +157,7 @@ char16_t s_chatRequest = 0;
 bool s_chatOpen = false;
 std::vector<int> modPresses;
 bool s_screenshotRequest = false;
+bool hideHudRequest = false;
 std::vector<int> s_scriptKeys;
 bool s_hoverPending = false;
 PcInputModPad s_modPad;
@@ -428,6 +439,8 @@ void CodePressed(int code, InputContext context)
     }
     if (code == PcKeyBinding(ePcKey_Screenshot))
         s_screenshotRequest = true;
+    if (code == PcKeyBinding(ePcKey_HideHud) && s_inGame && context == eInputContext_Game && !s_chatOpen && !s_textEntry)
+        hideHudRequest = true;
     if (s_inGame && context == eInputContext_Game && !s_chatOpen && !s_textEntry)
     {
         for (int act = ePcKey_Count; act < PcKeyBindingCount(); act++)
@@ -780,6 +793,34 @@ void PcInputFillGamePad(VPADStatus* status)
         s_lastDevice = ePcGlyphSet_XboxOne;
     }
     const InputContext context = CurrentContext();
+    const uint32_t padHold = hold;
+    const bool gameSelect = context == eInputContext_Game && s_inGame && !s_chatOpen && !s_textEntry;
+    if (hold & VPAD_BUTTON_MINUS)
+    {
+        unsigned long long now = PcOsMonotonicNanoseconds();
+        if (selectStart == 0)
+        {
+            selectStart = now;
+            selectInGame = gameSelect;
+        }
+        if (selectInGame)
+        {
+            hold &= ~VPAD_BUTTON_MINUS;
+            if (!selectChatSent && gameSelect && now - selectStart >= SELECT_HOLD_NANOSECONDS)
+            {
+                s_chatRequest = u't';
+                padChatRequest = true;
+                selectChatSent = true;
+            }
+        }
+    }
+    else
+    {
+        if (selectStart != 0 && selectInGame && !selectChatSent && gameSelect)
+            hold |= VPAD_BUTTON_MINUS;
+        selectStart = 0;
+        selectChatSent = false;
+    }
     for (unsigned int index = 0; index < sizeof(kKeyBindings) / sizeof(kKeyBindings[0]); ++index)
     {
         if (s_keys[kKeyBindings[index].key] || s_keyTapped[kKeyBindings[index].key])
@@ -799,11 +840,12 @@ void PcInputFillGamePad(VPADStatus* status)
         if (s_glideKeys && BindingActive(ePcKey_GlideGhost, eInputContext_Game))
             hold |= VPAD_BUTTON_R;
     }
-    else if (context == eInputContext_Container
-             && (BindingActive(ePcKey_Inventory, eInputContext_Container)
-                 || BindingActive(ePcKey_Crafting, eInputContext_Container)))
+    else if (context == eInputContext_Container)
     {
-        hold |= VPAD_BUTTON_B;
+        if (BindingActive(ePcKey_Inventory, eInputContext_Container) || BindingActive(ePcKey_Crafting, eInputContext_Container))
+            hold |= VPAD_BUTTON_B;
+        if (BindingActive(ePcKey_TakeEverything, eInputContext_Container))
+            hold |= VPAD_BUTTON_L;
     }
     if (context != eInputContext_Game && NavigationInput(pad))
         s_mousePointer = false;
@@ -890,6 +932,9 @@ void PcInputFillGamePad(VPADStatus* status)
         s_lookY = 0.0f;
     if (s_chatOpen)
     {
+        if (PcChatOnScreenKeyboard())
+            PcTextKeyboardUpdate(padHold, padHold & ~chatPadPrev, pad.leftX, pad.leftY);
+        chatHeld = hold;
         status->trigger = 0;
         status->release = s_previousHold;
         status->hold = 0;
@@ -897,6 +942,7 @@ void PcInputFillGamePad(VPADStatus* status)
         status->leftStick.x = status->leftStick.y = 0.0f;
         status->rightStick.x = status->rightStick.y = 0.0f;
     }
+    chatPadPrev = padHold;
 }
 
 bool PcInputFillProController(int channel, KPADStatus* status)
@@ -1077,6 +1123,13 @@ char16_t PcInputConsumeChatKey()
     return key;
 }
 
+bool PcInputConsumeChatFromPad()
+{
+    bool fromPad = padChatRequest;
+    padChatRequest = false;
+    return fromPad;
+}
+
 void PcInputSetChatOpen(bool open)
 {
     s_chatOpen = open;
@@ -1154,6 +1207,11 @@ bool PcInputSprintHeld()
            && !CodeDown(PcKeyBinding(ePcKey_Back));
 }
 
+bool PcInputModSprintHeld()
+{
+    return s_modPad.sprint && CurrentContext() == eInputContext_Game;
+}
+
 bool PcInputBindingHeld(PcKeyAction action)
 {
     return CodeHeldIn(PcKeyBinding(action), eInputContext_Game) && !s_textEntry && !s_chatOpen;
@@ -1192,6 +1250,13 @@ bool PcInputConsumeScreenshotKey()
 {
     bool requested = s_screenshotRequest;
     s_screenshotRequest = false;
+    return requested;
+}
+
+bool PcInputConsumeHideHudKey()
+{
+    bool requested = hideHudRequest;
+    hideHudRequest = false;
     return requested;
 }
 
@@ -1268,7 +1333,8 @@ void PcTextEntryBegin(const char16_t* initialText, unsigned int maxLength)
 
 void PcTextEntryEnd()
 {
-    s_heldAfterTextEntry = s_previousHold;
+    s_heldAfterTextEntry = s_previousHold | chatHeld;
+    chatHeld = 0;
     s_previousHold = 0;
     for (int slot = 0; slot < kPadSlots; ++slot)
     {

@@ -34,6 +34,34 @@
     X(PFNGLCREATESHADERPROC, CreateShader)                                                                             \
     X(PFNGLCULLFACEPROC, CullFace)                                                                                     \
     X(PFNGLDELETEBUFFERSPROC, DeleteBuffers)                                                                           \
+    X(PFNGLBINDSAMPLERPROC, BindSampler)                                                                               \
+    X(PFNGLBLENDFUNCSEPARATEPROC, BlendFuncSeparate)                                                                   \
+    X(PFNGLCLEARBUFFERFIPROC, ClearBufferfi)                                                                           \
+    X(PFNGLCLEARBUFFERFVPROC, ClearBufferfv)                                                                           \
+    X(PFNGLCLEARBUFFERIVPROC, ClearBufferiv)                                                                           \
+    X(PFNGLCLEARBUFFERUIVPROC, ClearBufferuiv)                                                                         \
+    X(PFNGLDELETESAMPLERSPROC, DeleteSamplers)                                                                         \
+    X(PFNGLDISABLEIPROC, Disablei)                                                                                     \
+    X(PFNGLGENSAMPLERSPROC, GenSamplers)                                                                               \
+    X(PFNGLGETSTRINGIPROC, GetStringi)                                                                                 \
+    X(PFNGLMAPBUFFERRANGEPROC, MapBufferRange)                                                                         \
+    X(PFNGLSAMPLERPARAMETERIPROC, SamplerParameteri)                                                                   \
+    X(PFNGLTEXBUFFERPROC, TexBuffer)                                                                                   \
+    X(PFNGLTEXIMAGE1DPROC, TexImage1D)                                                                                 \
+    X(PFNGLTEXIMAGE3DPROC, TexImage3D)                                                                                 \
+    X(PFNGLUNMAPBUFFERPROC, UnmapBuffer)                                                                               \
+    X(PFNGLDELETEFRAMEBUFFERSPROC, DeleteFramebuffers)                                                                 \
+    X(PFNGLDELETEPROGRAMPROC, DeleteProgram)                                                                           \
+    X(PFNGLDRAWBUFFERSPROC, DrawBuffers)                                                                               \
+    X(PFNGLGENERATEMIPMAPPROC, GenerateMipmap)                                                                         \
+    X(PFNGLGETACTIVEUNIFORMPROC, GetActiveUniform)                                                                     \
+    X(PFNGLUNIFORM1FVPROC, Uniform1fv)                                                                                 \
+    X(PFNGLUNIFORM2FPROC, Uniform2f)                                                                                   \
+    X(PFNGLUNIFORM3FPROC, Uniform3f)                                                                                   \
+    X(PFNGLUNIFORM2IPROC, Uniform2i)                                                                                   \
+    X(PFNGLUNIFORM3IPROC, Uniform3i)                                                                                   \
+    X(PFNGLUNIFORM4IPROC, Uniform4i)                                                                                   \
+    X(PFNGLUNIFORMMATRIX3FVPROC, UniformMatrix3fv)                                                                     \
     X(PFNGLDELETESHADERPROC, DeleteShader)                                                                             \
     X(PFNGLDELETETEXTURESPROC, DeleteTextures)                                                                         \
     X(PFNGLDELETEVERTEXARRAYSPROC, DeleteVertexArrays)                                                                 \
@@ -42,10 +70,14 @@
     X(PFNGLDISABLEPROC, Disable)                                                                                       \
     X(PFNGLDRAWARRAYSPROC, DrawArrays)                                                                                 \
     X(PFNGLDRAWELEMENTSBASEVERTEXPROC, DrawElementsBaseVertex)                                                         \
+    X(PFNGLMULTIDRAWELEMENTSBASEVERTEXPROC, MultiDrawElementsBaseVertex)                                               \
     X(PFNGLENABLEPROC, Enable)                                                                                         \
     X(PFNGLENABLEVERTEXATTRIBARRAYPROC, EnableVertexAttribArray)                                                       \
     X(PFNGLDISABLEVERTEXATTRIBARRAYPROC, DisableVertexAttribArray)                                                     \
     X(PFNGLFINISHPROC, Finish)                                                                                         \
+    X(PFNGLGENQUERIESPROC, GenQueries)                                                                                 \
+    X(PFNGLQUERYCOUNTERPROC, QueryCounter)                                                                             \
+    X(PFNGLGETQUERYOBJECTUI64VPROC, GetQueryObjectui64v)                                                               \
     X(PFNGLFENCESYNCPROC, FenceSync)                                                                                   \
     X(PFNGLCLIENTWAITSYNCPROC, ClientWaitSync)                                                                         \
     X(PFNGLDELETESYNCPROC, DeleteSync)                                                                                 \
@@ -92,10 +124,19 @@
     X(PFNGLVERTEXATTRIBPOINTERPROC, VertexAttribPointer)                                                               \
     X(PFNGLVIEWPORTPROC, Viewport)
 
+#define PC_GL_OPTIONAL_FUNCTIONS(X) \
+    X(PFNGLBINDIMAGETEXTUREPROC, BindImageTexture) \
+    X(PFNGLBLENDFUNCSEPARATEIPROC, BlendFuncSeparatei) \
+    X(PFNGLCLEARBUFFERDATAPROC, ClearBufferData) \
+    X(PFNGLCLEARTEXIMAGEPROC, ClearTexImage) \
+    X(PFNGLDISPATCHCOMPUTEPROC, DispatchCompute) \
+    X(PFNGLMEMORYBARRIERPROC, MemoryBarrier)
+
 namespace PcGl
 {
 #define PC_GL_DECLARE(type, name) extern type name;
 PC_GL_FUNCTIONS(PC_GL_DECLARE)
+PC_GL_OPTIONAL_FUNCTIONS(PC_GL_DECLARE)
 #undef PC_GL_DECLARE
 
 bool Load();

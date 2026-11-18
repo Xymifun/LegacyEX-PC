@@ -126,7 +126,11 @@ void UIScene_ControlsMenu::Init(int player)
     {
         std::wstring versionString = MiniGameDef::GetCustomGameModeById(eMiniGameId_Battle, true)->getVersionString();
         wchar_t* versionText = new wchar_t[128];
+#ifdef MINECRAFT_PC
+        std::swprintf(versionText, 128, L"%ls %ls %ls", L"1.12.2178.0", versionString.c_str(), L"");
+#else
         std::swprintf(versionText, 128, L"%ls %ls %ls", L"1.12.2177.0", versionString.c_str(), L"");
+#endif
         m_version.init(UIString(versionText));
         delete[] versionText;
     }

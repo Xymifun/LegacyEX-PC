@@ -1,4 +1,7 @@
 #include "game/core/CMinecraftApp.hpp"
+#ifdef MINECRAFT_PC
+#include "platform/pc/PcTextureOverride.hpp"
+#endif
 #include "game/core/VirtualPadKeys.hpp"
 #include "game/core/System.hpp"
 #include "game/core/PIXNamedEvents.hpp"
@@ -239,9 +242,15 @@ static TIPSTRUCT sGeneralTips[] = {
     {0, IDS_TIPS_GAMETIP_40}, {0, IDS_TIPS_GAMETIP_41}, {0, IDS_TIPS_GAMETIP_42}, {0, IDS_TIPS_GAMETIP_43},
     {0, IDS_TIPS_GAMETIP_44}, {0, IDS_TIPS_GAMETIP_45}, {0, IDS_TIPS_GAMETIP_46}, {0, IDS_TIPS_GAMETIP_47},
     {0, IDS_TIPS_GAMETIP_48}, {0, IDS_TIPS_GAMETIP_49}, {0, IDS_TIPS_GAMETIP_50}};
+#ifdef MINECRAFT_PC
+static TIPSTRUCT sAlternateTips[] = {
+    {0, IDS_TIPS_TRIVIA_1},  {0, IDS_TIPS_TRIVIA_3},  {0, IDS_TIPS_TRIVIA_4},  {0, IDS_TIPS_TRIVIA_7},
+    {0, IDS_TIPS_TRIVIA_8},  {0, IDS_TIPS_TRIVIA_9},
+#else
 static TIPSTRUCT sAlternateTips[] = {
     {0, IDS_TIPS_TRIVIA_1},  {0, IDS_TIPS_TRIVIA_2},  {0, IDS_TIPS_TRIVIA_3},  {0, IDS_TIPS_TRIVIA_4},
     {0, IDS_TIPS_TRIVIA_6},  {0, IDS_TIPS_TRIVIA_7},  {0, IDS_TIPS_TRIVIA_8},  {0, IDS_TIPS_TRIVIA_9},
+#endif
     {0, IDS_TIPS_TRIVIA_10}, {0, IDS_TIPS_TRIVIA_11}, {0, IDS_TIPS_TRIVIA_12}, {0, IDS_TIPS_TRIVIA_13},
     {0, IDS_TIPS_TRIVIA_14}, {0, IDS_TIPS_TRIVIA_15}, {0, IDS_TIPS_TRIVIA_16}, {0, IDS_TIPS_TRIVIA_17},
     {0, IDS_TIPS_TRIVIA_18}, {0, IDS_TIPS_TRIVIA_19}, {0, IDS_TIPS_TRIVIA_20}, {0, IDS_TIPS_TRIVIA_21},
@@ -1509,11 +1518,19 @@ void CMinecraftApp::SetupMiniGameMusic()
 {
     Minecraft* minecraft = Minecraft::GetInstance();
     unsigned int packId = minecraft->mTexturePackRepository->getSelectedId();
+#ifdef MINECRAFT_PC
+    packId = PcTextureOverrideThemePack(packId);
+#endif
     ClientMasterGameMode* masterGameMode = minecraft->GetClientMasterGameMode();
     const unsigned int themeId = masterGameMode->GetCurrentThemeId();
     const bool waitingForMusicStart = masterGameMode->IsWaitingForMusicStartEvent();
     const MiniGameDef* miniGame = minecraft->GetMiniGame();
     SoundEngine* soundEngine = minecraft->mSoundEngine;
+#ifdef MINECRAFT_PC
+    if (PcTextureOverrideMusicPack() != minecraft->mTexturePackRepository->getSelected())
+        soundEngine->SetStreamingSounds(0, 0xb, 0xc, 0xf, 0x10, 0x11, 0x12, 0x17, 0x18, 0x1b, 0x1c, 0x1f, 0x20, 0x29,
+                                        0x2a, 0x2a, 0x3e, 0x44, 0x57);
+#endif
 
     const int miniGameId = miniGame->GetId();
     unsigned int playMiniGameId = static_cast<unsigned int>(miniGameId);
@@ -1705,12 +1722,16 @@ int CMinecraftApp::GameModeTransitionThreadProc(void* context)
     if (minecraft->mTexturePackRepository->selectTexturePackById(texturePackId, false))
     {
         SetupMiniGameMusic();
-        if (previousPack->hasAudio())
+        bool samePack = false;
+#ifdef MINECRAFT_PC
+        samePack = previousPack == minecraft->mTexturePackRepository->getSelected();
+#endif
+        if (!samePack && previousPack->hasAudio())
         {
             previousPackWithAudio->unloadAudio();
             gStorage->UnmountInstalledDLC("TPACK");
         }
-        else if (previousPack != Minecraft::GetInstance()->mTexturePackRepository->defaultTexturePack)
+        else if (!samePack && previousPack != Minecraft::GetInstance()->mTexturePackRepository->defaultTexturePack)
         {
             gStorage->UnmountInstalledDLC("TPACK");
         }

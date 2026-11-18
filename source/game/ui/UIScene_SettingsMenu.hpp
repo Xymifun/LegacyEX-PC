@@ -26,13 +26,13 @@ public:
     virtual void handlePress(int controlId, int childId);
     virtual int getSceneType();
 
-private:
     struct ListMenuInitData
     {
         int playerId;
         int mode;
     };
 
+private:
 #ifdef MINECRAFT_PC
     void RemoveButtons(bool destroyControls);
 #endif

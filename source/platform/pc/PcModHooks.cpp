@@ -416,6 +416,26 @@ void SendToPlayer(void* serverPlayer, const char* channel, const void* data, int
         gMinecraftServer->getPlayers()->broadcastAll(packet);
 }
 
+void SendPayload(const char* channel, const void* data, int size)
+{
+    if (channel == 0 || size < 0 || size > 30000)
+        return;
+    Minecraft* mc = Minecraft::GetInstance();
+    int pad = gProfile->GetPrimaryPad();
+    ClientPacketListener* conn = 0;
+    if (mc != 0 && pad >= 0 && pad < 4 && mc->mLocalPlayers[pad] != 0)
+        conn = mc->getConnection(pad);
+    if (conn == 0)
+        return;
+    std::wstring name;
+    for (int i = 0; channel[i] != 0; i++)
+        name += (wchar_t)(unsigned char)channel[i];
+    arrayWithLength<unsigned char> buf(size, false);
+    if (size > 0)
+        memcpy(buf.data, data, size);
+    conn->send(boost::shared_ptr<Packet>(new ServerboundCustomPayloadPacket(name, buf)));
+}
+
 bool ByKey(const EntityDef& a, const EntityDef& b)
 {
     return a.key < b.key;
@@ -447,6 +467,7 @@ void PcModHooksFillHost(PcNativeHost* host)
     host->sendToHost = SendToHost;
     host->sendToPlayer = SendToPlayer;
     host->onMessage = OnMessage;
+    host->sendPayload = SendPayload;
 }
 
 void PcModHooksAddEntities()

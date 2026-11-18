@@ -38,6 +38,10 @@ fuiBitmapFont::fuiBitmapFont(SFontData& fontData, unsigned short missingGlyphCha
     gRenderer->TextureBind(static_cast<int>(m_textureIndex));
     gRenderer->TextureSetTextureLevels(1);
     gRenderer->TextureData(width, height, pixels, 0, C4JRender::eTextureFormat_RGBA8);
+#ifdef MINECRAFT_PC
+    gRenderer->TextureSetParam(1, 1);
+    gRenderer->TextureSetParam(2, 1);
+#endif
     m_registered = false;
 }
 

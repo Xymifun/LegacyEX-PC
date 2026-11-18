@@ -232,9 +232,14 @@ bool CreateGlContext()
         s_glContext = legacy;
         return true;
     }
-    const int attributes[] = {kWglContextMajorVersionArb, 3, kWglContextMinorVersionArb, 3, kWglContextProfileMaskArb,
-                              kWglContextCoreProfileBitArb, 0};
-    HGLRC core = createContextAttribs(s_deviceContext, 0, attributes);
+    const int VERSIONS[6][2] = {{4, 6}, {4, 5}, {4, 3}, {4, 1}, {4, 0}, {3, 3}};
+    HGLRC core = 0;
+    for (int i = 0; i < 6 && core == 0; i++)
+    {
+        const int attributes[] = {kWglContextMajorVersionArb, VERSIONS[i][0], kWglContextMinorVersionArb,
+                                  VERSIONS[i][1], kWglContextProfileMaskArb, kWglContextCoreProfileBitArb, 0};
+        core = createContextAttribs(s_deviceContext, 0, attributes);
+    }
     if (core == 0)
     {
         const int forwardCompatible[] = {kWglContextMajorVersionArb, 3, kWglContextMinorVersionArb, 3,

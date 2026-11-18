@@ -28,6 +28,8 @@
 #include "platform/pc/PcTutorials.hpp"
 #include "platform/pc/PcVoice.hpp"
 #include "platform/pc/PcKeyBindings.hpp"
+#include "platform/pc/PcShaderPacks.hpp"
+#include "game/ui/UIScene_SettingsMenu.hpp"
 
 static int s_pendingRenderDistance = -1;
 static const int TITLE_LOGO_ITEM = 44;
@@ -40,6 +42,21 @@ static const int VOICE_MODE_ITEM = 52;
 static const int PROXIMITY_CHAT_ITEM = 53;
 static const int PROXIMITY_RANGE_ITEM = 54;
 static const int VOICE_VOLUME_ITEM = 55;
+static const int SHADER_SETTINGS_ITEM = 56;
+static const int SHADER_PACK_ITEM = 57;
+static const int TEXTURE_OVERRIDE_ITEM = 60;
+static bool textureMenuRequested = false;
+static const int SHADER_SETTINGS_MODE = 5;
+static const size_t SHADER_PACK_NAME_LENGTH = 24;
+static std::vector<std::string> s_shaderPacks;
+static int s_pendingShaderPack = -1;
+static const int SHADER_OPTIONS_ITEM = 58;
+static const int SHADER_RESET_ITEM = 59;
+static const int SHADER_ENTRY_ITEM = 100;
+static const int SHADER_OPTIONS_MODE = 6;
+static const size_t SHADER_LABEL_LENGTH = 36;
+static const size_t SHADER_VALUE_LENGTH = 16;
+static std::vector<std::string> s_shaderPages;
 static const size_t MIC_NAME_LENGTH = 40;
 static const int GOLDEN_AGE_GROUP_COUNT = 6;
 static const wchar_t* const goldenAgeLabels[GOLDEN_AGE_GROUP_COUNT] = {
@@ -77,9 +94,79 @@ static void FramerateLabel(int step, wchar_t* text)
         std::swprintf(text, 256, L"Max Framerate: %d", limit);
 }
 
-static void RenderScaleLabel(int step, wchar_t* text)
+static void ShaderPackLabel(int index, wchar_t* text)
 {
-    std::swprintf(text, 256, L"Render Scale: %d%%", PcSettingsRenderScale(step));
+    if (index <= 0 || index > (int)s_shaderPacks.size())
+    {
+        std::swprintf(text, 256, s_shaderPacks.empty() ? L"Shader Pack: Default (none in Windows64/shaderpacks)"
+                                                       : L"Shader Pack: Default");
+        return;
+    }
+    std::string name = s_shaderPacks[index - 1];
+    if (name.size() > 4 && (name.compare(name.size() - 4, 4, ".zip") == 0 || name.compare(name.size() - 4, 4, ".ZIP") == 0))
+        name.erase(name.size() - 4);
+    if (name.size() > SHADER_PACK_NAME_LENGTH)
+        name = name.substr(0, SHADER_PACK_NAME_LENGTH - 3) + "...";
+    std::swprintf(text, 256, L"Shader Pack: %ls", std::wstring(name.begin(), name.end()).c_str());
+}
+
+static std::wstring CutShaderText(const std::wstring& text, size_t length)
+{
+    if (text.size() <= length)
+        return text;
+    return text.substr(0, length > 3 ? length - 3 : 0) + L"...";
+}
+
+static std::wstring ShaderEntryLabel(const PcShaderMenuEntry& entry)
+{
+    switch (entry.kind)
+    {
+    case PcShaderMenuEntry::Choice:
+    case PcShaderMenuEntry::Profile:
+    case PcShaderMenuEntry::Info:
+    {
+        const std::wstring value = CutShaderText(entry.valueLabel, SHADER_VALUE_LENGTH);
+        const size_t room = SHADER_LABEL_LENGTH > value.size() + 2 ? SHADER_LABEL_LENGTH - value.size() - 2 : 4;
+        return CutShaderText(entry.label, room) + L": " + value;
+    }
+    case PcShaderMenuEntry::Toggle:
+        return CutShaderText(entry.label, SHADER_LABEL_LENGTH - 2);
+    default:
+        return entry.label;
+    }
+}
+
+static bool SameShaderPage(const std::vector<PcShaderMenuEntry>& left, const std::vector<PcShaderMenuEntry>& right)
+{
+    if (left.size() != right.size())
+        return false;
+    for (size_t index = 0; index < left.size(); ++index)
+    {
+        if (left[index].kind != right[index].kind || left[index].key != right[index].key
+            || left[index].count != right[index].count)
+            return false;
+    }
+    return true;
+}
+
+static int CurrentShaderPackIndex()
+{
+    const std::string current = PcShaderPacksCurrent();
+    for (size_t index = 0; index < s_shaderPacks.size(); ++index)
+    {
+        if (s_shaderPacks[index] == current)
+            return (int)index + 1;
+    }
+    return 0;
+}
+
+static void ApplyPendingShaderPack()
+{
+    const int index = s_pendingShaderPack;
+    s_pendingShaderPack = -1;
+    if (index < 0 || index == CurrentShaderPackIndex())
+        return;
+    PcShaderPacksChoose(index == 0 || index > (int)s_shaderPacks.size() ? std::string() : s_shaderPacks[index - 1]);
 }
 
 static void TitleLogoLabel(wchar_t* text)
@@ -171,6 +258,11 @@ UIScene_SettingsListMenu::UIScene_SettingsListMenu(int sceneType, void* data, UI
     int* settingsData = static_cast<int*>(data);
     m_settingsMode = static_cast<unsigned int>(settingsData[1]);
     delete settingsData;
+#ifdef MINECRAFT_PC
+    m_shaderVersion = 0;
+    if (m_settingsMode == SHADER_OPTIONS_MODE && !s_shaderPages.empty())
+        m_shaderPage = s_shaderPages.back();
+#endif
     Init();
 }
 
@@ -180,6 +272,15 @@ UIScene_SettingsListMenu::~UIScene_SettingsListMenu()
     ApplyPendingRenderDistance();
     if (m_settingsMode == 1)
         PcVoiceSetTest(false);
+    if (m_settingsMode == SHADER_OPTIONS_MODE)
+    {
+        if (!s_shaderPages.empty())
+            s_shaderPages.pop_back();
+        if (s_shaderPages.empty())
+            PcShaderPacksApplyOptions();
+    }
+    if (m_settingsMode == SHADER_SETTINGS_MODE)
+        PcShaderPacksApplyOptions();
 #endif
 }
 
@@ -230,6 +331,10 @@ void UIScene_SettingsListMenu::Init()
     m_primaryPlayer = gProfile->GetPrimaryPad() == m_playerId;
     m_host = CGameNetworkManager::sInstance.IsHost();
     m_saveRequested = false;
+#ifdef MINECRAFT_PC
+    m_shaderMenuRequested = false;
+    m_shaderPageRequested = false;
+#endif
 
     switch (m_settingsMode)
     {
@@ -367,9 +472,9 @@ void UIScene_SettingsListMenu::Init()
             std::swprintf(text, 256, L"Simulation Distance: %d", PcSettingsSimulationDistance());
             m_multiList.AddNewSlider(std::wstring(text), 37, kPcSimulationDistanceMinimum,
                                      kPcSimulationDistanceMaximum, PcSettingsSimulationDistance(), true, 7, 1);
-            RenderScaleLabel(PcSettingsRenderScaleStep(), text);
-            m_multiList.AddNewSlider(std::wstring(text), 35, 0, kPcRenderScaleSteps - 1, PcSettingsRenderScaleStep(),
-                                     false, 7, 3);
+            m_multiList.AddNewButton(std::wstring(L"Shader Settings"), SHADER_SETTINGS_ITEM, false);
+            if (gApp.GetLocalPlayerCount() <= 1)
+                m_multiList.AddNewButton(std::wstring(L"Texture Override"), TEXTURE_OVERRIDE_ITEM, false);
 #endif
         }
         if (!m_gameStarted
@@ -465,6 +570,23 @@ void UIScene_SettingsListMenu::Init()
                                  false, 7, 3);
     }
     break;
+    case SHADER_SETTINGS_MODE:
+    {
+        s_shaderPacks = PcShaderPacksList();
+        const int index = s_pendingShaderPack >= 0 ? s_pendingShaderPack : CurrentShaderPackIndex();
+        ShaderPackLabel(index, text);
+        m_multiList.AddNewSlider(std::wstring(text), SHADER_PACK_ITEM, 0, (int)s_shaderPacks.size(), index, false, 7,
+                                 3);
+        if (s_shaderPacks.empty())
+            m_multiList.EnableItem(SHADER_PACK_ITEM, false, true);
+        m_multiList.AddNewButton(std::wstring(L"Shader Options"), SHADER_OPTIONS_ITEM, false);
+        if (index == 0)
+            m_multiList.EnableItem(SHADER_OPTIONS_ITEM, false, true);
+    }
+    break;
+    case SHADER_OPTIONS_MODE:
+        AddShaderPage();
+        break;
 #endif
     }
     doVerticalResizeCheck();
@@ -618,6 +740,14 @@ void UIScene_SettingsListMenu::setGameSettings()
             PcGoldenAgeSetGroups(groups);
         }
         break;
+    case SHADER_SETTINGS_MODE:
+        ApplyPendingShaderPack();
+        PcShaderPacksApplyOptions();
+        break;
+    case SHADER_OPTIONS_MODE:
+        if (m_shaderPage.empty() && s_shaderPages.size() <= 1)
+            PcShaderPacksApplyOptions();
+        break;
 #endif
     }
 }
@@ -631,6 +761,37 @@ void UIScene_SettingsListMenu::tick()
         wchar_t text[256];
         MicTestLabel(text);
         m_multiList.SetItemLabel(MIC_TEST_ITEM, UIString(text), false);
+    }
+#endif
+#ifdef MINECRAFT_PC
+    if (m_settingsMode == SHADER_OPTIONS_MODE && m_shaderVersion != PcShaderPacksOptionsVersion())
+        RefreshShaderPage();
+    if (m_shaderPageRequested)
+    {
+        m_shaderPageRequested = false;
+        s_shaderPages.push_back(m_shaderPageTarget);
+        UIScene_SettingsMenu::ListMenuInitData* data = new UIScene_SettingsMenu::ListMenuInitData();
+        data->mode = SHADER_OPTIONS_MODE;
+        data->playerId = m_playerId;
+        gConsoleUIController.NavigateToScene(m_playerId, EUIScene_SettingsListMenu, data, EUILayer_Scene,
+                                             EUIGroup_PlayerDefault);
+    }
+    if (textureMenuRequested)
+    {
+        textureMenuRequested = false;
+        setGameSettings();
+        gConsoleUIController.NavigateToScene(m_playerId, EUIScene_PcTextureOverride, NULL, EUILayer_Scene,
+                                             EUIGroup_PlayerDefault);
+    }
+    if (m_shaderMenuRequested)
+    {
+        m_shaderMenuRequested = false;
+        setGameSettings();
+        UIScene_SettingsMenu::ListMenuInitData* data = new UIScene_SettingsMenu::ListMenuInitData();
+        data->mode = SHADER_SETTINGS_MODE;
+        data->playerId = m_playerId;
+        gConsoleUIController.NavigateToScene(m_playerId, EUIScene_SettingsListMenu, data, EUILayer_Scene,
+                                             EUIGroup_PlayerDefault);
     }
 #endif
     if (m_saveRequested)
@@ -711,10 +872,48 @@ void UIScene_SettingsListMenu::handlePress(int, int childId)
     gConsoleUIController.PlayUISFX(SoundEvents::UI_PRESS);
     if (childId == 5)
         m_saveRequested = true;
+#ifdef MINECRAFT_PC
+    if (childId == SHADER_SETTINGS_ITEM)
+        m_shaderMenuRequested = true;
+    if (childId == TEXTURE_OVERRIDE_ITEM)
+        textureMenuRequested = true;
+    if (childId == SHADER_OPTIONS_ITEM)
+    {
+        ApplyPendingShaderPack();
+        if (PcShaderPacksHasOptions())
+        {
+            m_shaderPageTarget.clear();
+            m_shaderPageRequested = true;
+        }
+    }
+    if (childId == SHADER_RESET_ITEM)
+        PcShaderPacksResetOptions();
+    const int entry = childId - SHADER_ENTRY_ITEM;
+    if (m_settingsMode == SHADER_OPTIONS_MODE && entry >= 0 && entry < (int)m_shaderEntries.size()
+        && m_shaderEntries[entry].kind == PcShaderMenuEntry::Page)
+    {
+        m_shaderPageTarget = m_shaderEntries[entry].key;
+        m_shaderPageRequested = true;
+    }
+#endif
 }
 
 void UIScene_SettingsListMenu::handleCheckboxElementToggled(int, int id, bool checked)
 {
+#ifdef MINECRAFT_PC
+    const int entry = id - SHADER_ENTRY_ITEM;
+    if (m_settingsMode == SHADER_OPTIONS_MODE && entry >= 0 && entry < (int)m_shaderEntries.size()
+        && m_shaderEntries[entry].kind == PcShaderMenuEntry::Toggle)
+    {
+        if (m_shaderEntries[entry].checked == checked)
+            return;
+        gConsoleUIController.PlayUISFX(SoundEvents::UI_PRESS);
+        m_shaderEntries[entry].checked = checked;
+        PcShaderPacksSetToggle(m_shaderEntries[entry].key, checked);
+        RefreshShaderPage();
+        return;
+    }
+#endif
     gConsoleUIController.PlayUISFX(SoundEvents::UI_PRESS);
 #ifdef MINECRAFT_PC
     int forcedRange = 0;
@@ -739,6 +938,18 @@ void UIScene_SettingsListMenu::handleCheckboxElementToggled(int, int id, bool ch
 void UIScene_SettingsListMenu::handleSliderElementMove(int, int id, int value)
 {
     gConsoleUIController.PlayUISFX(SoundEvents::UI_SCROLL);
+#ifdef MINECRAFT_PC
+    const int entry = id - SHADER_ENTRY_ITEM;
+    if (m_settingsMode == SHADER_OPTIONS_MODE && entry >= 0 && entry < (int)m_shaderEntries.size())
+    {
+        if (m_shaderEntries[entry].kind == PcShaderMenuEntry::Choice)
+            PcShaderPacksSetChoice(m_shaderEntries[entry].key, value);
+        else if (m_shaderEntries[entry].kind == PcShaderMenuEntry::Profile)
+            PcShaderPacksSetProfile(value);
+        RefreshShaderPage();
+        return;
+    }
+#endif
     wchar_t text[256];
     switch (id)
     {
@@ -850,11 +1061,11 @@ void UIScene_SettingsListMenu::handleSliderElementMove(int, int id, int value)
         TitleLogoLabel(text);
         m_multiList.SetItemLabel(TITLE_LOGO_ITEM, UIString(text), false);
         break;
-    case 35:
-        PcSettingsSetRenderScaleStep(value);
-        PcSettingsSave();
-        RenderScaleLabel(PcSettingsRenderScaleStep(), text);
-        m_multiList.SetItemLabel(35, UIString(text), false);
+    case SHADER_PACK_ITEM:
+        s_pendingShaderPack = value;
+        ShaderPackLabel(value, text);
+        m_multiList.SetItemLabel(SHADER_PACK_ITEM, UIString(text), false);
+        m_multiList.EnableItem(SHADER_OPTIONS_ITEM, value != 0, false);
         break;
 #endif
     case 24:
@@ -892,3 +1103,70 @@ int UIScene_SettingsListMenu::getSceneType()
 {
     return EUIScene_SettingsListMenu;
 }
+
+#ifdef MINECRAFT_PC
+void UIScene_SettingsListMenu::AddShaderPage()
+{
+    m_shaderEntries = PcShaderPacksPage(m_shaderPage);
+    m_shaderVersion = PcShaderPacksOptionsVersion();
+    for (size_t index = 0; index < m_shaderEntries.size(); ++index)
+    {
+        const PcShaderMenuEntry& entry = m_shaderEntries[index];
+        const int id = SHADER_ENTRY_ITEM + (int)index;
+        switch (entry.kind)
+        {
+        case PcShaderMenuEntry::Toggle:
+            m_multiList.AddNewCheckbox(ShaderEntryLabel(entry), id, entry.checked);
+            break;
+        case PcShaderMenuEntry::Choice:
+        case PcShaderMenuEntry::Profile:
+            m_multiList.AddNewSlider(ShaderEntryLabel(entry), id, 0, entry.count - 1, entry.value, false, 7, 3);
+            break;
+        case PcShaderMenuEntry::Page:
+            m_multiList.AddNewButton(entry.label, id, true);
+            break;
+        case PcShaderMenuEntry::Info:
+            m_multiList.AddNewButton(ShaderEntryLabel(entry), id, true);
+            m_multiList.EnableItem(id, false, true);
+            break;
+        }
+    }
+    if (m_shaderPage.empty())
+    {
+        if (m_shaderEntries.empty())
+        {
+            m_multiList.AddNewButton(std::wstring(L"This pack has no options"), SHADER_ENTRY_ITEM, false);
+            m_multiList.EnableItem(SHADER_ENTRY_ITEM, false, true);
+        }
+        m_multiList.AddNewButton(std::wstring(L"Reset to Defaults"), SHADER_RESET_ITEM, false);
+    }
+}
+
+void UIScene_SettingsListMenu::RefreshShaderPage()
+{
+    const std::vector<PcShaderMenuEntry> entries = PcShaderPacksPage(m_shaderPage);
+    m_shaderVersion = PcShaderPacksOptionsVersion();
+    if (!SameShaderPage(entries, m_shaderEntries))
+    {
+        m_multiList.clearList();
+        AddShaderPage();
+        doVerticalResizeCheck();
+        HideDescription();
+        return;
+    }
+    for (size_t index = 0; index < entries.size(); ++index)
+    {
+        const PcShaderMenuEntry& entry = entries[index];
+        const PcShaderMenuEntry& shown = m_shaderEntries[index];
+        const int id = SHADER_ENTRY_ITEM + (int)index;
+        if (entry.label != shown.label || entry.valueLabel != shown.valueLabel)
+            m_multiList.SetItemLabel(id, UIString(ShaderEntryLabel(entry)), false);
+        if (entry.kind == PcShaderMenuEntry::Toggle && entry.checked != shown.checked)
+            m_multiList.SetCheckboxValue(id, entry.checked, false);
+        if ((entry.kind == PcShaderMenuEntry::Choice || entry.kind == PcShaderMenuEntry::Profile)
+            && entry.value != shown.value)
+            m_multiList.SetSliderValue(id, entry.value, false);
+    }
+    m_shaderEntries = entries;
+}
+#endif

@@ -42,6 +42,9 @@
 #include "game/core/GameSettings.hpp"
 #include "platform/wiiu/C4JThreadImpl.hpp"
 #include "platform/wiiu/WiiU_Runtime.hpp"
+#ifdef MINECRAFT_PC
+#include "platform/pc/PcOnlineConnection.hpp"
+#endif
 
 extern ConsoleUIController gConsoleUIController;
 
@@ -124,12 +127,23 @@ void UIScene_PauseMenu::Init()
             else if (Minecraft::GetInstance()->GetFirstMiniGame()->GetId() == eMiniGameId_Tumble)
                 m_buttonList.AddNewMenuButton(L10N::GetString(IDS_MG02_SETTINGS), 7);
         }
+#ifdef MINECRAFT_PC
+        if (PcOnlineConnectionIsFriendsLobby())
+            m_buttonList.AddNewMenuButton(L"Friends List", 9);
+#endif
     }
-    else if (primaryPlayer && CGameNetworkManager::sInstance.IsHost())
+    else
     {
-        m_buttonList.AddNewMenuButton(L10N::GetString(IDS_SAVE_GAME), 5);
-        if (gApp.HasNoSpaceForSaveQuota())
-            m_buttonList.EnableItem(5, false, true);
+#ifdef MINECRAFT_PC
+        if (PcOnlineConnectionIsFriendsLobby())
+            m_buttonList.AddNewMenuButton(L"Friends List", 9);
+#endif
+        if (primaryPlayer && CGameNetworkManager::sInstance.IsHost())
+        {
+            m_buttonList.AddNewMenuButton(L10N::GetString(IDS_SAVE_GAME), 5);
+            if (gApp.HasNoSpaceForSaveQuota())
+                m_buttonList.EnableItem(5, false, true);
+        }
     }
 
     m_buttonList.AddNewMenuButton(L10N::GetString(IDS_EXIT_GAME), 6);
@@ -333,6 +347,12 @@ void UIScene_PauseMenu::handlePress(int, int childId)
         break;
     case 3:
         break;
+#ifdef MINECRAFT_PC
+    case 9:
+        gConsoleUIController.NavigateToScene(m_playerId, EUIScene_PcFriendsMenu, (void*)1, EUILayer_Scene,
+                                             EUIGroup_PlayerDefault);
+        return;
+#endif
     }
 }
 

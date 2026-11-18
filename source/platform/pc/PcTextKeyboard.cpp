@@ -1,4 +1,5 @@
 #include "platform/pc/PcTextKeyboard.hpp"
+#include "platform/pc/PcDisplay.hpp"
 
 #include "platform/pc/PcChat.hpp"
 
@@ -384,7 +385,7 @@ PcTextEntryResult PcTextKeyboardUpdate(uint32_t hold, uint32_t trigger, float st
 
 void PcTextKeyboardDraw()
 {
-    if (!PcTextEntryActive() || PcChatActive())
+    if (!PcTextEntryActive() || (PcChatActive() && !PcChatOnScreenKeyboard()))
         return;
     Minecraft* minecraft = Minecraft::GetInstance();
     if (minecraft == NULL || minecraft->mFont == NULL || minecraft->mGui == NULL)
@@ -407,8 +408,10 @@ void PcTextKeyboardDraw()
     GlStateManager::disableAlphaTest();
     GlStateManager::enableBlend();
     GlStateManager::blendFunc(4, 5);
+    PcSetWideWorldPass(true);
     minecraft->mGui->fill(0, 0, kVirtualWidth + 1, kVirtualHeight + 1,
                           static_cast<int>(s_shown ? 0xC0000000u : 0xA0000000u));
+    PcSetWideWorldPass(false);
     minecraft->mGui->fill(boxLeft - 1, boxTop - 1, boxRight + 1, boxBottom + 1, static_cast<int>(0xFFA0A0A0u));
     minecraft->mGui->fill(boxLeft, boxTop, boxRight, boxBottom, static_cast<int>(0xFF000000u));
     if (s_shown)

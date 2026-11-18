@@ -8,6 +8,11 @@
 #include "game/ui/UIControl_MultiList.hpp"
 #include "game/ui/UIControl_HTMLLabel.hpp"
 #include "game/ui/UIScene.hpp"
+#ifdef MINECRAFT_PC
+#include <vector>
+
+#include "platform/pc/PcShaderPacks.hpp"
+#endif
 
 class UIScene_SettingsListMenu : public UIScene
 {
@@ -44,6 +49,17 @@ private:
     bool m_primaryPlayer;
     bool m_host;
     bool m_saveRequested;
+#ifdef MINECRAFT_PC
+    void AddShaderPage();
+    void RefreshShaderPage();
+
+    bool m_shaderMenuRequested;
+    std::string m_shaderPage;
+    std::string m_shaderPageTarget;
+    bool m_shaderPageRequested;
+    std::vector<PcShaderMenuEntry> m_shaderEntries;
+    int m_shaderVersion;
+#endif
     wchar_t m_skinNames[9][256];
     wchar_t m_difficultyNames[4][256];
 };

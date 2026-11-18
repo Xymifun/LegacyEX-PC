@@ -1088,6 +1088,15 @@ std::wstring GameSettings::GetPlayerSkinName(int profile)
 {
     return CMinecraftApp::getSkinPathFromId(gGameSettings[profile]->mSkinId);
 }
+#ifdef MINECRAFT_PC
+uint32_t GameSettings::PcStoredSkinId(int profile)
+{
+    if (profile < 0 || profile > 3 || gGameSettings[profile] == NULL)
+        return 0;
+    return gGameSettings[profile]->mSkinId;
+}
+#endif
+
 uint32_t GameSettings::GetPlayerSkinId(int profile)
 {
     unsigned int id = 0;

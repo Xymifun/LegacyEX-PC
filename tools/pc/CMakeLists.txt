@@ -183,7 +183,7 @@ foreach(unit ${PC_SHARED_UNITS})
     list(APPEND PC_SHARED_SOURCES "${SOURCE_ROOT}/${unit}.cpp")
 endforeach()
 
-file(GLOB PC_PLATFORM_SOURCES CONFIGURE_DEPENDS "${SOURCE_ROOT}/platform/pc/*.cpp")
+file(GLOB PC_PLATFORM_SOURCES CONFIGURE_DEPENDS "${SOURCE_ROOT}/platform/pc/*.cpp" "${SOURCE_ROOT}/platform/pc/shaderpack/*.cpp")
 add_executable(MinecraftPC ${PC_PLATFORM_SOURCES} ${PC_SHARED_SOURCES})
 target_compile_options(MinecraftPC PRIVATE ${PC_HOOK_FLAG})
 file(GLOB PC_KEYBOARD_GLYPHS CONFIGURE_DEPENDS "${SOURCE_ROOT}/platform/pc/glyphs/keyboard/*.png")

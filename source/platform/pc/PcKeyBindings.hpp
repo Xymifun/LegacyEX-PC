@@ -26,6 +26,8 @@ enum PcKeyAction
     ePcKey_Command,
     ePcKey_PushToTalk,
     ePcKey_Screenshot,
+    ePcKey_HideHud,
+    ePcKey_TakeEverything,
     ePcKey_Hotbar1,
     ePcKey_Hotbar2,
     ePcKey_Hotbar3,

@@ -1,4 +1,7 @@
 #include "game/core/ConsoleUIController.hpp"
+#ifdef MINECRAFT_PC
+#include "platform/pc/PcTextureOverride.hpp"
+#endif
 #include "game/core/StringIds.hpp"
 
 #include <algorithm>
@@ -390,6 +393,14 @@ void ConsoleUIController::renderScenes()
     }
     else
     {
+#ifdef MINECRAFT_PC
+        bool worldHidden = m_groups[EUIGroup_Fullscreen]->hidesLowerScenes() != 0;
+        for (int group = 0; group < EUIGroup_Count && !worldHidden; ++group)
+            worldHidden = m_groups[group]->IsSceneInStack(EUIScene_FullscreenProgress)
+                          || m_groups[group]->IsSceneInStack(EUIScene_ConnectingProgress);
+        if (worldHidden)
+            PcClearOutsideUiArea();
+#endif
         if (!m_groups[EUIGroup_Fullscreen]->hidesLowerScenes())
         {
             PIXBeginNamedEvent(0.0f, "Rendering layer %d scenes", EUIGroup_Player1);
@@ -405,14 +416,6 @@ void ConsoleUIController::renderScenes()
             m_groups[EUIGroup_Player4]->render();
             PIXEndNamedEvent();
         }
-#ifdef MINECRAFT_PC
-        bool worldHidden = m_groups[EUIGroup_Fullscreen]->hidesLowerScenes() != 0;
-        for (int group = 0; group < EUIGroup_Count && !worldHidden; ++group)
-            worldHidden = m_groups[group]->IsSceneInStack(EUIScene_FullscreenProgress)
-                          || m_groups[group]->IsSceneInStack(EUIScene_ConnectingProgress);
-        if (worldHidden)
-            PcClearOutsideUiArea();
-#endif
         PIXBeginNamedEvent(0.0f, "Rendering fullscreen scenes");
         m_groups[EUIGroup_Fullscreen]->render();
         PIXEndNamedEvent();
@@ -2555,7 +2558,13 @@ void ConsoleUIController::NavigateToHomeMenu(bool immediate)
     gApp.setIgnoreMainMenuInputDuringInvite(false);
     TexturePack* previousPack = Minecraft::GetInstance()->mTexturePackRepository->getSelected();
     previousPack->hasAudio();
+#ifdef MINECRAFT_PC
+    PcTextureOverrideSkip(true);
+#endif
     minecraft->mTexturePackRepository->selectTexturePackById(0, false);
+#ifdef MINECRAFT_PC
+    PcTextureOverrideSkip(false);
+#endif
     if (!immediate)
     {
         minecraft->mSoundEngine->SetStreamingSounds(0, 0xb, 0xc, 0xf, 0x10, 0x11, 0x12, 0x17, 0x18, 0x1b, 0x1c, 0x1f,

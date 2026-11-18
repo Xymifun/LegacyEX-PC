@@ -1,4 +1,7 @@
 #include "game/client/audio/SoundEngine.hpp"
+#ifdef MINECRAFT_PC
+#include "platform/pc/PcTextureOverride.hpp"
+#endif
 #include "game/client/audio/DLCAudioFile.hpp"
 #include "game/client/audio/PlatformSoundEngine.hpp"
 #include "game/client/audio/PlatformSoundEngineImpl.hpp"
@@ -53,6 +56,15 @@ const int STREAM_TYPE_CD = 2;
 const int FADE_OUT_TICKS = 200;
 const int MINIGAME_MUSIC_DELAY = 60;
 const unsigned int SHORT_MUSIC_DELAY_TEXTURE_PACK_ID = 1036;
+
+static unsigned int MusicPackId()
+{
+#ifdef MINECRAFT_PC
+    return PcTextureOverrideMusicPack()->getId();
+#else
+    return Minecraft::GetInstance()->mTexturePackRepository->getSelected()->getId();
+#endif
+}
 const float PI = 3.1415927f;
 
 }
@@ -305,6 +317,9 @@ void SoundEngine::SetMusicID(eMusicType type)
     if (minecraft != NULL)
     {
         defaultPack = minecraft->mTexturePackRepository->getSelected() == TexturePackRepository::defaultTexturePack;
+#ifdef MINECRAFT_PC
+        defaultPack = PcTextureOverrideMusicPack() == TexturePackRepository::defaultTexturePack;
+#endif
     }
 
     if (defaultPack)
@@ -842,10 +857,13 @@ void SoundEngine::playMusicUpdate()
         {
             std::sprintf(m_streamName, "%s", m_szMusicPath);
 
-            if (Minecraft::GetInstance()->mTexturePackRepository->getSelected()->hasAudio())
+            TexturePack* musicPack = Minecraft::GetInstance()->mTexturePackRepository->getSelected();
+#ifdef MINECRAFT_PC
+            musicPack = PcTextureOverrideMusicPack();
+#endif
+            if (musicPack->hasAudio())
             {
-                DLCTexturePack* pack = static_cast<DLCTexturePack*>(
-                    Minecraft::GetInstance()->mTexturePackRepository->getSelected());
+                DLCTexturePack* pack = static_cast<DLCTexturePack*>(musicPack);
                 DLCAudioFile* audioFile = static_cast<DLCAudioFile*>(
                     pack->getDLCInfoParentPack()->getFile(DLCManager::eDLCType_Audio, 0, true, true));
 
@@ -1166,8 +1184,7 @@ void SoundEngine::playMusicUpdate()
         {
             if (noPlayers)
             {
-                if (Minecraft::GetInstance()->mTexturePackRepository->getSelected()->getId()
-                    == SHORT_MUSIC_DELAY_TEXTURE_PACK_ID)
+                if (MusicPackId() == SHORT_MUSIC_DELAY_TEXTURE_PACK_ID)
                     SetMusicID(eMusicType_Overworld);
                 else
                     SetMusicID(eMusicType_Menu);
@@ -1212,8 +1229,7 @@ void SoundEngine::playMusicUpdate()
             SetIsPlayingEndMusic(false);
         }
 
-        if (Minecraft::GetInstance()->mTexturePackRepository->getSelected()->getId()
-            == SHORT_MUSIC_DELAY_TEXTURE_PACK_ID)
+        if (MusicPackId() == SHORT_MUSIC_DELAY_TEXTURE_PACK_ID)
             m_musicDelay = m_random->nextInt(200) + 100;
 
         m_streamState = eMusicStreamState_Idle;

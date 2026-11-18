@@ -329,6 +329,25 @@ bool PcInputMenuPointerActive();
 int PcInputConsumeContainerHotbarKey();
 int PcInputConsumeContainerWheel();
 bool PcInputContainerLeftHeld();
+unsigned long long PcOsMonotonicNanoseconds();
+
+static unsigned long long pointerTime[4];
+static float pointerSteps[4];
+
+static float PointerFrameScale(int pad, int* ticks)
+{
+    unsigned long long now = PcOsMonotonicNanoseconds();
+    float scale = 1.0f;
+    if (pointerTime[pad] != 0)
+        scale = (float)(now - pointerTime[pad]) / 16666667.0f;
+    pointerTime[pad] = now;
+    if (scale > 6.0f)
+        scale = 1.0f;
+    pointerSteps[pad] += scale;
+    *ticks = (int)pointerSteps[pad];
+    pointerSteps[pad] -= *ticks;
+    return scale;
+}
 
 void IUIScene_AbstractContainerMenu::PcContainerExtras()
 {
@@ -366,6 +385,12 @@ void IUIScene_AbstractContainerMenu::onMouseTick()
 
     int pad = getPad();
     bool pointerMoved = false;
+    float frameScale = 1.0f;
+    int ticks = 1;
+#ifdef MINECRAFT_PC
+    if (pad >= 0 && pad < 4)
+        frameScale = PointerFrameScale(pad, &ticks);
+#endif
     float inputX = (float)(g_pInput->GetJoypadStick_Menu_LX(pad)
                            * ((float)GameSettings::GetGameSettings(pad, eGameSetting_InterfaceSensitivity) / 100.0f));
     float inputY = (float)(g_pInput->GetJoypadStick_Menu_LY(pad)
@@ -394,17 +419,23 @@ void IUIScene_AbstractContainerMenu::onMouseTick()
         else if (m_tapState < ETapState_NoMove && tapState != m_tapState && tapState != ETapState_None)
             m_tapState = ETapState_Cancelled;
 
-        float moveX = inputX * inputX * xDirection * 13.0f;
-        float moveY = inputY * inputY * yDirection * 13.0f;
+        float moveX = inputX * inputX * xDirection * 13.0f * frameScale;
+        float moveY = inputY * inputY * yDirection * 13.0f * frameScale;
         float speed = 1.0f;
         if (m_consecutiveInputTicks < 7)
         {
-            ++m_consecutiveInputTicks;
+            m_consecutiveInputTicks += ticks;
+            if (m_consecutiveInputTicks > 7)
+                m_consecutiveInputTicks = 7;
             speed = (float)m_consecutiveInputTicks / 7.0f;
+            if (speed == 0.0f)
+                speed = 1.0f / 7.0f;
         }
         else if (m_consecutiveInputTicks < 15)
         {
-            ++m_consecutiveInputTicks;
+            m_consecutiveInputTicks += ticks;
+            if (m_consecutiveInputTicks > 15)
+                m_consecutiveInputTicks = 15;
         }
         else
         {

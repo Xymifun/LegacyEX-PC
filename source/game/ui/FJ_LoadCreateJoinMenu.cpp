@@ -166,6 +166,10 @@ void FJ_LoadCreateJoinMenu::SetActiveTab(int tab)
 
 void FJ_LoadCreateJoinMenu::handlePress(FJ_Event* event)
 {
+#ifdef MINECRAFT_PC
+    FJ_Document::handlePress(event);
+    return;
+#endif
     FJ_Button* button = event->m_pTarget->asFJ_Button();
     if (button != NULL)
     {

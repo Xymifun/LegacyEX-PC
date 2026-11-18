@@ -6,6 +6,8 @@
 #include "platform/pc/PcLobbyProtocol.hpp"
 
 #include "game/core/CriticalSection.hpp"
+#include "game/core/GameSettings.hpp"
+#include "platform/wiiu/CProfile.hpp"
 #include "platform/wiiu/C4JThreadImpl.hpp"
 
 #include <algorithm>
@@ -66,6 +68,13 @@ std::wstring s_refusal;
 std::wstring s_linkCode;
 std::wstring s_linkText;
 std::vector<PcLobbyWorld> s_worlds;
+std::vector<PcLobbyFriend> friends;
+unsigned int friendsRevision = 0;
+std::vector<PcLobbyFriend> requests;
+unsigned int requestsRevision = 0;
+std::vector<std::vector<unsigned char> > outgoing;
+std::wstring notice;
+bool hasNotice = false;
 unsigned int wantedAddress = 0;
 std::vector<unsigned short> wantedPorts;
 unsigned int s_revision = 0;
@@ -211,7 +220,7 @@ bool SendIdentity(PcOsSocket socket, const LobbyHello& hello)
         {
             frame.insert(frame.end(), publicKey, publicKey + sizeof(publicKey));
             frame.insert(frame.end(), signature, signature + sizeof(signature));
-            frame.push_back(kLobbyShowsLinkCode | kLobbyKnowsFriends);
+            frame.push_back(kLobbyShowsLinkCode | kLobbyKnowsFriends | kLobbyKnowsRoster);
             frame.push_back(static_cast<unsigned char>(kPcGuestIdentities));
             for (int guest = 1; guest <= kPcGuestIdentities; ++guest)
             {
@@ -296,6 +305,101 @@ void HandleList(const Client* client, const std::vector<unsigned char>& frame)
     Unlock();
 }
 
+std::string FrameText(const std::vector<unsigned char>& frame, size_t start, size_t len);
+std::wstring DecodeUtf8(const std::string& text);
+
+void HandleRoster(const Client* client, const std::vector<unsigned char>& frame)
+{
+    std::vector<PcLobbyFriend> list;
+    if (frame.size() < 3)
+        return;
+    int count = frame[1] | (frame[2] << 8);
+    size_t pos = 3;
+    for (int i = 0; i < count; i++)
+    {
+        if (pos + 2 > frame.size())
+            break;
+        PcLobbyFriend f;
+        f.skin = 0;
+        f.online = frame[pos] != 0;
+        int len = frame[pos + 1];
+        pos += 2;
+        if (pos + len + 1 > frame.size())
+            break;
+        f.name = DecodeUtf8(FrameText(frame, pos, len));
+        pos += len;
+        len = frame[pos];
+        pos += 1;
+        if (pos + len > frame.size())
+            break;
+        f.discord = DecodeUtf8(FrameText(frame, pos, len));
+        pos += len;
+        if (pos < frame.size())
+        {
+            len = frame[pos];
+            pos += 1;
+            f.id = FrameText(frame, pos, len);
+            pos += len;
+        }
+        if (pos + 4 <= frame.size())
+        {
+            f.skin = GetU32(&frame[pos]);
+            pos += 4;
+        }
+        list.push_back(f);
+    }
+    Lock();
+    if (s_current == client)
+    {
+        friends.swap(list);
+        friendsRevision++;
+    }
+    Unlock();
+}
+
+void HandleRequests(const Client* client, const std::vector<unsigned char>& frame)
+{
+    std::vector<PcLobbyFriend> list;
+    if (frame.size() < 3)
+        return;
+    int count = frame[1] | (frame[2] << 8);
+    size_t pos = 3;
+    for (int i = 0; i < count; i++)
+    {
+        PcLobbyFriend f;
+        f.online = false;
+        f.skin = 0;
+        int len;
+        if (pos + 1 > frame.size())
+            break;
+        len = frame[pos++];
+        f.name = DecodeUtf8(FrameText(frame, pos, len));
+        pos += len;
+        if (pos + 1 > frame.size())
+            break;
+        len = frame[pos++];
+        f.discord = DecodeUtf8(FrameText(frame, pos, len));
+        pos += len;
+        if (pos + 1 > frame.size())
+            break;
+        len = frame[pos++];
+        f.id = FrameText(frame, pos, len);
+        pos += len;
+        if (pos + 4 > frame.size())
+            break;
+        f.skin = GetU32(&frame[pos]);
+        pos += 4;
+        list.push_back(f);
+    }
+    Lock();
+    if (s_current == client)
+    {
+        requests.swap(list);
+        requestsRevision++;
+    }
+    Unlock();
+}
+
 void SetStateLocked(EPcLobbyState state)
 {
     lobbyState = state;
@@ -304,6 +408,12 @@ void SetStateLocked(EPcLobbyState state)
         if (!s_worlds.empty())
             ++s_revision;
         s_worlds.clear();
+        if (!friends.empty())
+            friendsRevision++;
+        friends.clear();
+        if (!requests.empty())
+            requestsRevision++;
+        requests.clear();
     }
 }
 
@@ -375,6 +485,7 @@ unsigned int RunConnection(Client* client, PcOsSocket socket, const LobbyHello& 
     unsigned int sentHosted = 0xFFFFFFFFu;
     bool wasHosting = false;
     bool welcomed = false;
+    unsigned int sentSkin = 0xFFFFFFFFu;
     std::vector<unsigned char> frame;
     while (!client->stop)
     {
@@ -426,6 +537,24 @@ unsigned int RunConnection(Client* client, PcOsSocket socket, const LobbyHello& 
             case kLobbyFriendList:
                 HandleList(client, frame);
                 break;
+            case kLobbyRoster:
+                HandleRoster(client, frame);
+                break;
+            case kLobbyRequests:
+                HandleRequests(client, frame);
+                break;
+            case kLobbyNotice:
+            {
+                std::wstring text = DecodeUtf8(FrameText(frame, 1, frame.size()));
+                Lock();
+                if (s_current == client)
+                {
+                    notice = text;
+                    hasNotice = true;
+                }
+                Unlock();
+                break;
+            }
             case kLobbyOpen:
                 if (frame.size() >= 5)
                 {
@@ -476,6 +605,25 @@ unsigned int RunConnection(Client* client, PcOsSocket socket, const LobbyHello& 
             wasHosting = !hosted.empty();
             sentHosted = hostedRevision;
         }
+        unsigned int skin = GameSettings::PcStoredSkinId(gProfile != NULL ? gProfile->GetPrimaryPad() : -1);
+        if (skin != sentSkin)
+        {
+            std::vector<unsigned char> skinFrame(1, kLobbySkin);
+            PutU32(&skinFrame, skin);
+            if (!SendFrame(socket, skinFrame))
+                break;
+            sentSkin = skin;
+        }
+        Lock();
+        std::vector<std::vector<unsigned char> > toSend;
+        if (s_current == client)
+            toSend.swap(outgoing);
+        Unlock();
+        bool sendFailed = false;
+        for (size_t i = 0; i < toSend.size() && !sendFailed; i++)
+            sendFailed = !SendFrame(socket, toSend[i]);
+        if (sendFailed)
+            break;
         if (now - lastSent > kKeepAliveNanoseconds)
         {
             if (!SendFrame(socket, std::vector<unsigned char>(1, kLobbyKeepAlive)))
@@ -659,6 +807,66 @@ std::vector<PcLobbyWorld> PcLobbyClientWorlds(unsigned int* addr, unsigned short
     *secret = s_secret;
     Unlock();
     return worlds;
+}
+
+std::vector<PcLobbyFriend> PcLobbyClientFriends(unsigned int* revision)
+{
+    Lock();
+    std::vector<PcLobbyFriend> list = friends;
+    *revision = friendsRevision;
+    Unlock();
+    return list;
+}
+
+void PcLobbyClientRemoveFriend(const std::string& id)
+{
+    if (id.empty())
+        return;
+    std::vector<unsigned char> f(1, kLobbyRemoveFriend);
+    f.insert(f.end(), id.begin(), id.end());
+    Lock();
+    outgoing.push_back(f);
+    Unlock();
+}
+
+std::vector<PcLobbyFriend> PcLobbyClientRequests(unsigned int* revision)
+{
+    Lock();
+    std::vector<PcLobbyFriend> list = requests;
+    *revision = requestsRevision;
+    Unlock();
+    return list;
+}
+
+void PcLobbyClientAnswerRequest(const std::string& id, bool accept)
+{
+    if (id.empty())
+        return;
+    std::vector<unsigned char> f(1, kLobbyAnswerRequest);
+    f.push_back(accept ? 1 : 0);
+    f.insert(f.end(), id.begin(), id.end());
+    Lock();
+    outgoing.push_back(f);
+    Unlock();
+}
+
+void PcLobbyClientSendFriendRequest(const unsigned char uuid[16])
+{
+    std::vector<unsigned char> f(1, kLobbyFriendRequest);
+    f.insert(f.end(), uuid, uuid + 16);
+    Lock();
+    outgoing.push_back(f);
+    Unlock();
+}
+
+bool PcLobbyClientTakeNotice(std::wstring* text)
+{
+    Lock();
+    bool had = hasNotice;
+    *text = notice;
+    hasNotice = false;
+    Unlock();
+    return had;
 }
 
 void PcLobbyClientSetHosted(const std::vector<unsigned char>& sessionData, unsigned char visibility)

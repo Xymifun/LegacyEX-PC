@@ -95,8 +95,12 @@ enum EUIScene
     EUIScene_DebugCreateSchematic = 0x21,
 #ifdef MINECRAFT_PC
     EUIScene_PcGlideSections = 0xd,
-#endif
+    EUIScene_PcTextureOverride = 0xe,
+    EUIScene_PcFriendsMenu = 0x53,
+    EUIScene_None = 0x54,
+#else
     EUIScene_None = 0x53,
+#endif
     EUIScene_Count
 };
 

@@ -109,7 +109,7 @@ public:
     virtual int CBuffSize(int id);
     virtual void CBuffEnd();
     virtual bool CBuffCall(int id, bool bApplyMatrix, unsigned char layerMask);
-    void CBuffCallRun(const int* ids, int count);
+    void CBuffCallRun(const int* ids, int count, const unsigned char* masks = 0);
     virtual void CBuffTick();
     virtual void CBuffDeferredModeStart();
     virtual void CBuffDeferredModeEnd();
@@ -118,6 +118,8 @@ public:
     virtual void TextureFree(int texture);
     virtual void TextureBind(int texture);
     virtual void TextureBind(int stage, int texture);
+    unsigned int TextureGlName(int texture);
+    void TextureSize(int texture, int* width, int* height);
     virtual void TextureBindMask(int stage);
     virtual void TextureBindVertex(int texture);
     virtual void TextureSetTextureLevels(int levels);

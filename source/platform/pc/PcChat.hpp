@@ -7,6 +7,7 @@ class Minecraft;
 
 void PcChatTick(Minecraft* minecraft, int pad, bool gameActive);
 bool PcChatActive();
+bool PcChatOnScreenKeyboard();
 std::wstring PcChatText();
 
 #endif

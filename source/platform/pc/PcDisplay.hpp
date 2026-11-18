@@ -19,6 +19,8 @@ void PcSetLetterbox(bool letterbox);
 void PcSetWideWorldPass(bool wide);
 void PcSetWideUiPass(bool wide);
 void PcSetCoverUiPass(bool cover);
+void PcSetBarFillPass(int bar);
+bool PcHasUiBars();
 float PcGetUiWidthScale();
 void PcClearOutsideUiArea();
 float PcGetWorldAspect();
@@ -28,6 +30,9 @@ void PcCopyToMainTarget(unsigned int framebuffer, int width, int height);
 void PcScaleTarget(unsigned int source, int sourceWidth, int sourceHeight, unsigned int destination,
                    int destinationWidth, int destinationHeight);
 void PcResyncRendererState();
+bool PcShaderPackTarget(unsigned int* framebuffer, int* width, int* height);
+void PcSetQuadElements(const unsigned short* elements);
+void PcShaderPackRestore();
 void PcNeutralGlState();
 void PcDrawPanel(unsigned int framebuffer, int width, int height, unsigned int texture, const float* matrix,
                  bool opaque, const float* source, const float* cuts, int cutCount);

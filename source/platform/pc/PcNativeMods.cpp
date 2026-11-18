@@ -291,6 +291,7 @@ void SetPad(const PcNativePad* pad)
         st.press = pad->pointerPress != 0;
         st.chat = (pad->buttons & PC_NATIVE_PAD_CHAT) != 0;
         st.sneak = (pad->buttons & PC_NATIVE_PAD_SNEAK) != 0;
+        st.sprint = (pad->buttons & PC_NATIVE_PAD_SPRINT) != 0;
     }
     PcInputSetModPad(st);
 }

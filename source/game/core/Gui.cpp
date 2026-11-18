@@ -559,8 +559,14 @@ void Gui::render(float partialTick, bool hideGui, int width, int height)
             alpha = 1.0f - static_cast<float>(sleepTimer - 100) / 10.0f;
         }
         const int colour = (static_cast<int>(220.0f * alpha) << 24) | 0x101020;
+#ifdef MINECRAFT_PC
+        PcSetWideWorldPass(true);
+#endif
         fill(0, 0, static_cast<int>(static_cast<float>(screenWidth) / xScale),
              static_cast<int>(static_cast<float>(screenHeight) / yScale), colour);
+#ifdef MINECRAFT_PC
+        PcSetWideWorldPass(false);
+#endif
         GlStateManager::enableAlphaTest();
         GlStateManager::enableDepthTest();
     }
@@ -570,8 +576,14 @@ void Gui::render(float partialTick, bool hideGui, int width, int height)
         GlStateManager::disableAlphaTest();
         const float alpha = static_cast<float>(mMinecraft->mPlayer->getDeathFadeTimer()) / 21.0f;
         const int colour = (static_cast<int>(220.0f * alpha) << 24) | 0x200000;
+#ifdef MINECRAFT_PC
+        PcSetWideWorldPass(true);
+#endif
         fill(0, 0, static_cast<int>(static_cast<float>(screenWidth) / xScale),
              static_cast<int>(static_cast<float>(screenHeight) / yScale), colour);
+#ifdef MINECRAFT_PC
+        PcSetWideWorldPass(false);
+#endif
         GlStateManager::enableAlphaTest();
         GlStateManager::enableDepthTest();
     }
@@ -694,6 +706,8 @@ void Gui::renderChat(int playerIndex, int screenHeight)
             continue;
         const int top = bottom - static_cast<int>(i + 1) * CHAT_LINE_HEIGHT;
         fill(CHAT_LEFT - 2, top, CHAT_LEFT + CHAT_WIDTH + 2, top + CHAT_LINE_HEIGHT, (alpha / 2) << 24);
+        GlStateManager::enableBlend();
+        GlStateManager::blendFunc(4, 5);
         font->drawShadow(lineText[i], CHAT_LEFT, top + 1, 0xFFFFFF | (alpha << 24));
     }
     if (open)

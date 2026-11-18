@@ -1,12 +1,15 @@
 #include "platform/pc/PcMultiplayerMenu.hpp"
 
+#include "platform/pc/PcLobbyClient.hpp"
 #include "platform/pc/PcOnlineConnection.hpp"
 #include "platform/pc/PcOs.hpp"
 
 #include "game/core/ConsoleUIController.hpp"
 #include "game/core/L10N.hpp"
 #include "game/core/StringIds.hpp"
+#include "game/ui/UILayer.hpp"
 #include "platform/wiiu/CInput.hpp"
+#include "platform/wiiu/CProfile.hpp"
 
 #include <stdio.h>
 #include <string.h>
@@ -133,9 +136,7 @@ int HostingReturned(void*, int, C4JStorage::EMessageResult result)
     }
     if (result != C4JStorage::EMessageResult_Accept)
         return 0;
-    g_pInput->RequestKeyboard(L"Host Address", s_lastAddress.c_str(), s_pad, kAddressLength,
-                              AddressEntered, 0,
-                              C_4JInput::EKeyboardMode_0);
+    PcMultiplayerAskAddress(s_pad);
     return 0;
 }
 
@@ -167,12 +168,33 @@ std::wstring LocalAddresses()
 void PcOpenMultiplayerHosting(int pad)
 {
     s_showAddresses = false;
+    if (PcOnlineConnectionIsFriendsLobby())
+    {
+        gConsoleUIController.NavigateToScene(pad, EUIScene_PcFriendsMenu, NULL, EUILayer_Scene, EUIGroup_PlayerDefault);
+        return;
+    }
     OpenHostingBox(pad);
 }
 
-static void OpenHostingBox(int pad)
+void PcMultiplayerAskAddress(int pad)
 {
     s_pad = pad;
+    g_pInput->RequestKeyboard(L"Host Address", s_lastAddress.c_str(), pad, kAddressLength, AddressEntered, 0,
+                              C_4JInput::EKeyboardMode_0);
+}
+
+void PcMultiplayerToggleIp()
+{
+    s_showAddresses = !s_showAddresses;
+}
+
+bool PcMultiplayerShowingIp()
+{
+    return s_showAddresses;
+}
+
+std::wstring PcMultiplayerText()
+{
     const std::string& connected = PcOnlineConnectionAddress();
     if (!connected.empty())
         s_lastAddress = std::wstring(connected.begin(), connected.end());
@@ -188,12 +210,12 @@ static void OpenHostingBox(int pad)
     {
     case ePcOnline_Connected:
         if (PcOnlineConnectionIsLobby(0))
-            connection = L"<font color=\"#1E8C1E\">Connected to the " + connectedText
-                         + L" session</font>. Everyone's Online worlds there are under Play Game, in the Join "
-                           L"tab, and while you host one with Online Game on, it is listed for them.";
+            connection = L"<font color=\"#1E8C1E\">Connected to " + connectedText
+                         + L"</font>. Everyone's Online worlds are there under Play Game, in the Join "
+                           L"tab (if you host one with Online Game on, it is listed for them).";
         else
             connection = L"<font color=\"#1E8C1E\">Connected to " + connectedText
-                         + L"</font>. The Host's world is under Play Game, in the Join tab (or in Minigames)";
+                         + L"</font>. The Host's world should be under Play Game, in the Join tab (or in Minigames)";
         break;
     case ePcOnline_Refused:
         connection = connectedText + L" did not let this game in: " + PcOnlineConnectionRefusal();
@@ -225,6 +247,14 @@ static void OpenHostingBox(int pad)
              L"GUEST: Connect to the Host's address, then join their world from Play Game, in the Join tab (or in Minigames).<br><br>"
              L"%ls",
              LocalAddresses().c_str(), connection.c_str());
+    return s_message;
+}
+
+static void OpenHostingBox(int pad)
+{
+    s_pad = pad;
+    PcMultiplayerText();
+    const std::string& connected = PcOnlineConnectionAddress();
     s_disconnectShown = !connected.empty();
     int parameters[4];
     unsigned int count = 0;
@@ -247,6 +277,23 @@ void PcShowAlertSoon(int titleId, int textId, int pad)
 
 void PcMultiplayerMenuTick()
 {
+    std::wstring notice;
+    if (PcLobbyClientTakeNotice(&notice))
+    {
+        static wchar_t text[1100];
+        static int ok;
+        size_t n = 0;
+        for (size_t i = 0; i < notice.size() && n + 2 < sizeof(text) / sizeof(text[0]); i++)
+        {
+            text[n++] = notice[i];
+            if (notice[i] == L'%')
+                text[n++] = L'%';
+        }
+        text[n] = 0;
+        ok = (int)IDS_CONFIRM_OK;
+        gConsoleUIController.RequestAlertMessage(ePcString_SendFriendRequest, ePcString_SendFriendRequest, &ok, 1,
+                                                 gProfile->GetPrimaryPad(), 0, 0, text, true);
+    }
     if (s_alertFrames == 0 || --s_alertFrames > 0)
         return;
     s_alertParameter = static_cast<int>(IDS_CONFIRM_OK);

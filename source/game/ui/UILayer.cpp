@@ -80,7 +80,9 @@
 #include "game/ui/UIScene_DebugFillArea.hpp"
 #include "game/ui/UIScene_DebugCreateSchematic.hpp"
 #ifdef MINECRAFT_PC
+#include "platform/pc/PcFriendsMenu.hpp"
 #include "platform/pc/PcGlideSections.hpp"
+#include "platform/pc/PcTextureOverride.hpp"
 #endif
 #include "game/ui/UIScene_SkinSelectMenu.hpp"
 #include "game/ui/UIScene_SuperFlatEditLayer.hpp"
@@ -508,6 +510,12 @@ bool UILayer::NavigateToScene(int player, EUIScene scene, void* data)
 #ifdef MINECRAFT_PC
     case EUIScene_PcGlideSections:
         created = new UIScene_PcGlideSections(player, data, this);
+        break;
+    case EUIScene_PcTextureOverride:
+        created = new UIScene_PcTextureOverride(player, data, this);
+        break;
+    case EUIScene_PcFriendsMenu:
+        created = new UIScene_PcFriendsMenu(player, data, this);
         break;
 #endif
     case EUIScene_DebugFillArea:

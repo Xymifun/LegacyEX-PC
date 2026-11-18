@@ -121,7 +121,9 @@
 #include "platform/pc/PcDisplay.hpp"
 #include "platform/pc/PcSettings.hpp"
 #include "platform/pc/PcModViews.hpp"
+#include "platform/pc/PcShaderPacks.hpp"
 #include "platform/pc/PcNativeMods.hpp"
+#include "platform/pc/PcChat.hpp"
 #include "game/core/HumanoidArm.hpp"
 #endif
 #include <cmath>
@@ -1513,7 +1515,14 @@ void GameRenderer::renderItemInHand(float partialTick, int eyeIndex)
     const bool cameraSleeping = eTYPE_DERIVED_FROM(EntityType::LIVING_ENTITY, getCamera()->GetType())
                                 && boost::static_pointer_cast<LivingEntity>(getCamera())->isSleeping();
 
-    const bool skipFirstPersonHand = (!mRenderHand && !holdingMap) || thirdPerson != 0 || cameraSleeping;
+    bool skipFirstPersonHand = (!mRenderHand && !holdingMap) || thirdPerson != 0 || cameraSleeping;
+    bool drawScreenEffects = true;
+#ifdef MINECRAFT_PC
+    if (PcShaderPacksActive())
+        drawScreenEffects = false;
+    else if (PcShaderPacksDrewWorld())
+        skipFirstPersonHand = true;
+#endif
 
     if (skipFirstPersonHand)
     {
@@ -1530,7 +1539,7 @@ void GameRenderer::renderItemInHand(float partialTick, int eyeIndex)
         GlStateManager::popMatrix();
     }
 
-    if (localPlayer != NULL && getCameraThirdPerson() == 0 && !cameraSleeping)
+    if (localPlayer != NULL && getCameraThirdPerson() == 0 && !cameraSleeping && drawScreenEffects)
     {
         mItemInHandRenderer->renderScreenEffect(partialTick);
         bobHurt(partialTick);
@@ -2066,6 +2075,15 @@ void GameRenderer::resetFogColor(bool useBlack)
     }
 }
 
+#ifdef MINECRAFT_PC
+void GameRenderer::PcGetFogColour(float* colour) const
+{
+    colour[0] = mFogRed;
+    colour[1] = mFogGreen;
+    colour[2] = mFogBlue;
+}
+#endif
+
 void GameRenderer::setupFog(int, float partialTick)
 {
     static const float kOne = 1.0f;
@@ -2171,6 +2189,10 @@ void GameRenderer::prepareAndRenderClouds(LevelRenderer* levelRenderer, float pa
     const int playerIndex = gProfile->GetPrimaryPad();
     if (GameSettings::GetGameSettings(playerIndex, eGameSetting_Clouds) == 0)
         return;
+#ifdef MINECRAFT_PC
+    if (PcShaderPacksCloudMode() == 0)
+        return;
+#endif
 
     if (!Minecraft::GetInstance()->GetMiniGame()->HasFeatureClouds())
         return;
@@ -2799,6 +2821,10 @@ void GameRenderer::renderSnowAndRain(float partialTick)
     GlStateManager::blendFunc(4, 5);
     const float alphaRef = 0.01f;
     GlStateManager::alphaFunc(4, alphaRef);
+#ifdef MINECRAFT_PC
+    if (PcShaderPacksActive())
+        GlStateManager::depthMask(PcShaderPacksWeatherDepth());
+#endif
 
     MemSect(0x1f);
     mMinecraft->mTextures->bindTexture(&sSnowTexture);
@@ -3004,6 +3030,9 @@ void GameRenderer::renderSnowAndRain(float partialTick)
     GlStateManager::enableCull();
     GlStateManager::disableBlend();
     GlStateManager::alphaFunc(4, alphaRef);
+#ifdef MINECRAFT_PC
+    GlStateManager::depthMask(true);
+#endif
     turnOffLightLayer(partialTick);
 
     gRenderer->StateSetEnableViewportClipPlanes(false);
@@ -3020,11 +3049,18 @@ void GameRenderer::renderEyePass(int eyeIndex, float partialTick, long long, boo
     setupClearColor(partialTick);
     GlStateManager::clear(3);
     setupCamera(partialTick, eyeIndex);
+#ifdef MINECRAFT_PC
+    if (PcShaderPacksBeginWorld(this, partialTick))
+        PcShaderPacksRenderShadows(mMinecraft->mLevelRenderer, partialTick);
+#endif
 
     Camera::prepare(mMinecraft->mPlayer, getCameraThirdPerson() == 2);
 
     Frustum::getFrustum();
     setupFog(-1, partialTick);
+#ifdef MINECRAFT_PC
+    PcShaderPacksSetStage(ShaderRenderStage_Sky);
+#endif
     levelRenderer->renderSky(partialTick);
 
     if (mMinecraft->mTexturePackRepository->getSelected()->getId() == 0x402)
@@ -3049,6 +3085,9 @@ void GameRenderer::renderEyePass(int eyeIndex, float partialTick, long long, boo
 
     if (cameraEntity->mY + cameraEntity->getEyeHeight() < static_cast<double>(mMinecraft->mLevel->getCloudHeight()))
     {
+#ifdef MINECRAFT_PC
+        PcShaderPacksSetStage(ShaderRenderStage_Clouds);
+#endif
         prepareAndRenderClouds(levelRenderer, partialTick, eyeIndex, cameraX, cameraY, cameraZ);
     }
 
@@ -3063,6 +3102,9 @@ void GameRenderer::renderEyePass(int eyeIndex, float partialTick, long long, boo
     Lighting::turnOff();
 
     InfoBarManager::StartTimingCategory(InfoBarManager::eTimingCagegory_Terrain);
+#ifdef MINECRAFT_PC
+    PcShaderPacksSetStage(ShaderRenderStage_TerrainSolid);
+#endif
     levelRenderer->render(cameraEntity, 0, partialTick, sortTransparent);
     InfoBarManager::EndTimingCategory(InfoBarManager::eTimingCagegory_Terrain);
 
@@ -3072,9 +3114,15 @@ void GameRenderer::renderEyePass(int eyeIndex, float partialTick, long long, boo
     {
         Lighting::turnOn();
         culler->prepare(cameraEntity->mX, cameraEntity->mY, cameraEntity->mZ);
+#ifdef MINECRAFT_PC
+        PcShaderPacksSetStage(ShaderRenderStage_Entities);
+#endif
         levelRenderer->renderEntities(cameraEntity, culler, partialTick);
 
         InfoBarManager::StartTimingCategory(InfoBarManager::eTimingCagegory_Particles);
+#ifdef MINECRAFT_PC
+        PcShaderPacksSetStage(ShaderRenderStage_Particles);
+#endif
         turnOnLightLayer(partialTick);
         particleEngine->renderLit(cameraEntity, partialTick, 1);
         Lighting::turnOff();
@@ -3088,6 +3136,9 @@ void GameRenderer::renderEyePass(int eyeIndex, float partialTick, long long, boo
             {
                 boost::shared_ptr<Player> player = boost::static_pointer_cast<Player>(cameraEntity);
                 GlStateManager::disableAlphaTest();
+#ifdef MINECRAFT_PC
+                PcShaderPacksSetStage(ShaderRenderStage_Outline);
+#endif
                 levelRenderer->renderHit(player, mMinecraft->mHitResult, 0, player->mInventory->getSelected(),
                                          partialTick);
                 GlStateManager::enableAlphaTest();
@@ -3098,6 +3149,25 @@ void GameRenderer::renderEyePass(int eyeIndex, float partialTick, long long, boo
     }
 
     InfoBarManager::StartTimingCategory(InfoBarManager::eTimingCagegory_TerrainTransparent);
+#ifdef MINECRAFT_PC
+    if (PcShaderPacksActive() && PcModViewsShowHand())
+    {
+        GlStateManager::matrixMode(1);
+        GlStateManager::pushMatrix();
+        GlStateManager::matrixMode(0);
+        GlStateManager::pushMatrix();
+        PcShaderPacksBeginHand();
+        renderItemInHand(partialTick, eyeIndex);
+        PcShaderPacksEndHand();
+        GlStateManager::matrixMode(1);
+        GlStateManager::popMatrix();
+        GlStateManager::matrixMode(0);
+        GlStateManager::popMatrix();
+        GlStateManager::alphaFunc(4, 0.01f);
+    }
+    PcShaderPacksBeginTranslucent();
+    PcShaderPacksSetStage(ShaderRenderStage_TerrainTranslucent);
+#endif
     GlStateManager::disableBlend();
     GlStateManager::enableCull();
     GlStateManager::blendFunc(4, 5);
@@ -3110,6 +3180,9 @@ void GameRenderer::renderEyePass(int eyeIndex, float partialTick, long long, boo
     MemSect(0);
     GlStateManager::blendFunc(0, 1);
     GlStateManager::enableCull();
+#ifdef MINECRAFT_PC
+    if (!PcShaderPacksActive())
+#endif
     levelRenderer->render(cameraEntity, 2, partialTick, sortTransparent);
     GlStateManager::blendFunc(4, 5);
     levelRenderer->render(cameraEntity, 2, partialTick, sortTransparent);
@@ -3117,6 +3190,9 @@ void GameRenderer::renderEyePass(int eyeIndex, float partialTick, long long, boo
     levelRenderer->render(cameraEntity, 1, partialTick, sortTransparent);
     InfoBarManager::EndTimingCategory(InfoBarManager::eTimingCagegory_TerrainTransparent);
 
+#ifdef MINECRAFT_PC
+    PcShaderPacksSetStage(ShaderRenderStage_Particles);
+#endif
     Lighting::turnOn();
     turnOnLightLayer(partialTick);
     particleEngine->renderLit(cameraEntity, partialTick, 0);
@@ -3135,11 +3211,17 @@ void GameRenderer::renderEyePass(int eyeIndex, float partialTick, long long, boo
         {
             boost::shared_ptr<Player> outlinePlayer = boost::static_pointer_cast<Player>(cameraEntity);
             GlStateManager::disableAlphaTest();
+#ifdef MINECRAFT_PC
+            PcShaderPacksSetStage(ShaderRenderStage_Outline);
+#endif
             levelRenderer->renderHitOutline(outlinePlayer, mMinecraft->mHitResult, 0, partialTick);
             GlStateManager::enableAlphaTest();
         }
     }
 
+#ifdef MINECRAFT_PC
+    PcShaderPacksSetStage(ShaderRenderStage_Entities);
+#endif
     renderThermal(culler, partialTick);
 
     if (Minecraft::InMiniGame(eMiniGameId_Glide, true))
@@ -3166,21 +3248,40 @@ void GameRenderer::renderEyePass(int eyeIndex, float partialTick, long long, boo
         }
     }
 
+#ifdef MINECRAFT_PC
+    PcShaderPacksSetStage(ShaderRenderStage_Destroy);
+#endif
     levelRenderer->renderDestroyAnimation(Tesselator::getInstance(), boost::static_pointer_cast<Player>(cameraEntity),
                                           partialTick);
 
     if (static_cast<double>(mMinecraft->mLevel->getCloudHeight()) <= cameraEntity->mY + cameraEntity->getEyeHeight())
     {
+#ifdef MINECRAFT_PC
+        PcShaderPacksSetStage(ShaderRenderStage_Clouds);
+#endif
         prepareAndRenderClouds(levelRenderer, partialTick, eyeIndex, cameraX, cameraY, cameraZ);
     }
 
     setupFog(0, partialTick);
     GlStateManager::enableFog();
+#ifdef MINECRAFT_PC
+    PcShaderPacksSetStage(ShaderRenderStage_RainSnow);
+#endif
     renderSnowAndRain(partialTick);
     GlStateManager::disableFog();
 #ifdef MINECRAFT_PC
     if (PcModViewsDrawsInWorld())
         renderModHands(partialTick);
+    if (PcShaderPacksActive())
+    {
+        PcShaderPacksEndWorld();
+        if (PcModViewsShowHand())
+        {
+            GlStateManager::clear(1);
+            renderItemInHand(partialTick, eyeIndex);
+        }
+        return;
+    }
     if (!PcModViewsShowHand())
         return;
 #endif
@@ -3407,6 +3508,7 @@ void GameRenderer::renderLevel(float partialTick, long long targetNanoTime)
     GlStateManager::enableAlphaTest();
     GlStateManager::alphaFunc(4, kAlphaRef);
 #ifdef MINECRAFT_PC
+    PcShaderPacksBeginFrame(false);
     PcSetWideWorldPass(true);
     if (PcModViewsBeginFrame(mMinecraft->getCameraEntity().get(), partialTick))
     {
@@ -3438,7 +3540,13 @@ void GameRenderer::renderLevel(float partialTick, long long targetNanoTime)
     else
     {
         GlStateManager::colorMask(true, true, true, false);
+#ifdef MINECRAFT_PC
+        PcShaderPacksBeginFrame(true);
+#endif
         renderEyePass(2, partialTick, targetNanoTime, sortTransparent);
+#ifdef MINECRAFT_PC
+        PcShaderPacksEndWorld();
+#endif
     }
 #ifdef MINECRAFT_PC
     PcSetWideWorldPass(false);
@@ -3536,7 +3644,12 @@ void GameRenderer::render(float partialTick, long long frameNanoTime, bool refre
 
         mLastNanos = System::processTimeInNanoSecs();
 
-        if (!mMinecraft->mOptions->mHideGui || mMinecraft->mScreen != NULL)
+        bool drawGui = !mMinecraft->mOptions->mHideGui || mMinecraft->mScreen != NULL;
+#ifdef MINECRAFT_PC
+        if (PcChatActive())
+            drawGui = true;
+#endif
+        if (drawGui)
         {
             GlStateManager::alphaFunc(4, 0.01f);
             mMinecraft->mGui->render(partialTick, mMinecraft->mScreen != NULL, 0, screenHeight - 1);

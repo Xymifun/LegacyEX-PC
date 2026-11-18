@@ -17,6 +17,8 @@
 #ifdef MINECRAFT_PC
 int PcButtonGlyphTexture(const char* name, int textureId);
 
+void PcRendererSharpText(bool on);
+
 static const char* PcImageCarrier(const char* name)
 {
     return std::strncmp(name, "PcKey_", 6) == 0 ? "ActionBottom" : name;
@@ -795,6 +797,9 @@ void fuiRenderNodeEditText::DrawRenderData(RenderStringStateData& state)
         gRenderer->StateSetStencil(5, gFui->getCurrentStencilMask(), 0xff, 0);
     }
 
+#ifdef MINECRAFT_PC
+    PcRendererSharpText(true);
+#endif
     if (!(*state.activeBitmapVerts)[0].empty())
     {
         gRenderer->TextureBind(m_boldFont->getTextureIndex(m_glyphScale, 0));
@@ -821,6 +826,9 @@ void fuiRenderNodeEditText::DrawRenderData(RenderStringStateData& state)
         DrawFontVerts(state, &(*state.activeFontVerts)[3]);
     }
 
+#ifdef MINECRAFT_PC
+    PcRendererSharpText(false);
+#endif
     gRenderer->StateSetStencil(7, 0, 0, 0);
     gRenderer->StateSetDepthTestEnable(false);
     gRenderer->StateSetDepthMask(false);

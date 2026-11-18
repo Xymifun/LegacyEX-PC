@@ -19,6 +19,7 @@ EPcOnlineStatus PcOnlineConnectionStatus();
 std::wstring PcOnlineMenuLabel();
 void PcOnlineConnectionTick();
 bool PcOnlineConnectionIsLobby(unsigned short* port);
+bool PcOnlineConnectionIsFriendsLobby();
 std::wstring PcOnlineConnectionRefusal();
 void PcOnlineConnectionLinkCode(std::wstring* code, std::wstring* text);
 

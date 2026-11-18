@@ -154,6 +154,17 @@ UIScene_InGamePlayerOptionsMenu::UIScene_InGamePlayerOptionsMenu(int sceneType, 
             }
             resetCheatCheckboxes();
         }
+#ifdef MINECRAFT_PC
+        else if (cheatsEnabled && player != NULL && !player->IsHost()
+                 && Player::getPlayerGamePrivilege(gApp.GetPlayerPrivileges(localPlayer->GetSmallId()),
+                                                   Player::ePlayerGamePrivilege_Op) != 0)
+        {
+            unsigned int gameType = gApp.GetPlayerGameType(m_smallId);
+            m_playerOptions.AddNewSlider(L10N::GetString(GameType::byId(gameType)->getSliderLabel()),
+                                         ePlayerOption_GameMode, 0, GameType::ADVENTURE->getId(), gameType, false, 7,
+                                         3);
+        }
+#endif
 
         if (player != NULL && !player->IsLocal()
             && !player->IsSameSystem(CGameNetworkManager::sInstance.GetHostPlayer()))
@@ -356,6 +367,17 @@ void UIScene_InGamePlayerOptionsMenu::handleReload()
             }
             resetCheatCheckboxes();
         }
+#ifdef MINECRAFT_PC
+        else if (cheatsEnabled && player != NULL && !player->IsHost()
+                 && Player::getPlayerGamePrivilege(gApp.GetPlayerPrivileges(localPlayer->GetSmallId()),
+                                                   Player::ePlayerGamePrivilege_Op) != 0)
+        {
+            unsigned int gameType = gApp.GetPlayerGameType(m_smallId);
+            m_playerOptions.AddNewSlider(L10N::GetString(GameType::byId(gameType)->getSliderLabel()),
+                                         ePlayerOption_GameMode, 0, GameType::ADVENTURE->getId(), gameType, false, 7,
+                                         3);
+        }
+#endif
 
         if (player != NULL && !player->IsLocal()
             && !player->IsSameSystem(CGameNetworkManager::sInstance.GetHostPlayer()))
@@ -391,6 +413,13 @@ void UIScene_InGamePlayerOptionsMenu::handleInput(int playerId, int action, bool
             const bool cheatsEnabled = gApp.GetGameHostOption(eGameHostOption_CheatsEnabled) != 0;
             bool host = localPlayer != 0 && localPlayer == player;
             m_isHost = host;
+            bool opMode = false;
+#ifdef MINECRAFT_PC
+            opMode = !host && cheatsEnabled && localPlayer != 0 && !localPlayer->IsHost() && player != 0
+                     && !player->IsHost()
+                     && Player::getPlayerGamePrivilege(gApp.GetPlayerPrivileges(localPlayer->GetSmallId()),
+                                                       Player::ePlayerGamePrivilege_Op) != 0;
+#endif
 
             if (host)
             {
@@ -498,6 +527,22 @@ void UIScene_InGamePlayerOptionsMenu::handleInput(int playerId, int action, bool
                         }
                     }
                 }
+                else if (opMode)
+                {
+                    unsigned int currentGameType = gApp.GetPlayerGameType(m_smallId);
+                    unsigned int gameType = m_playerOptions.GetSliderValue(ePlayerOption_GameMode);
+                    if (currentGameType != gameType)
+                    {
+                        boost::shared_ptr<MultiplayerLocalPlayer> localMultiplayerPlayer =
+                            Minecraft::GetInstance()->mLocalPlayers[m_playerId];
+                        if (localMultiplayerPlayer && localMultiplayerPlayer->mPacketListener != 0)
+                        {
+                            sentGameModeChange = true;
+                            localMultiplayerPlayer->mPacketListener->send(
+                                GameModeCommand::preparePacket(player->GetUID(), (unsigned char)gameType));
+                        }
+                    }
+                }
             }
 
             unsigned int currentPrivileges = gApp.GetPlayerPrivileges(m_smallId);
@@ -508,7 +553,7 @@ void UIScene_InGamePlayerOptionsMenu::handleInput(int playerId, int action, bool
                 if (localMultiplayerPlayer && localMultiplayerPlayer->mPacketListener != 0)
                 {
                     unsigned int gameTypeByte = gApp.GetPlayerGameType(m_smallId);
-                    if (localPlayer->IsHost() && cheatsEnabled)
+                    if ((localPlayer->IsHost() || opMode) && cheatsEnabled)
                         gameTypeByte = m_playerOptions.GetSliderValue(ePlayerOption_GameMode);
                     localMultiplayerPlayer->mPacketListener->send(boost::shared_ptr<PlayerInfoPacket>(
                         new PlayerInfoPacket(m_smallId, -1, m_privileges, gameTypeByte)));

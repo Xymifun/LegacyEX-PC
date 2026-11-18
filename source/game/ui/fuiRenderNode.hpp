@@ -50,6 +50,15 @@ protected:
     FJ_FuiNode* m_node;
 
 public:
+#ifdef MINECRAFT_PC
+    void PcSetName(const char* name)
+    {
+        int n = 0;
+        for (; name[n] != 0 && n < 63; n++)
+            m_name[n] = name[n];
+        m_name[n] = 0;
+    }
+#endif
     fuiRenderNode(fuiRenderNode*, fuiRenderNode*, fuiObject*, unsigned int, eFuiObjectType, unsigned char, fuiRGBA*,
                   unsigned char, bool, fuiFile*);
     virtual ~fuiRenderNode();

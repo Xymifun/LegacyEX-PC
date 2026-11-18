@@ -806,6 +806,20 @@ uint32_t FJ_List::GetTopItem()
     return static_cast<uint32_t>(m_topItem);
 }
 
+#ifdef MINECRAFT_PC
+void FJ_List::PcWrapEnds()
+{
+    if (m_items.size() < 2)
+        return;
+    FJ_Base* first = m_items[0]->asFJ_Base();
+    FJ_Base* last = m_items[m_items.size() - 1]->asFJ_Base();
+    if (first == NULL || last == NULL)
+        return;
+    first->m_navUpName = last->getName();
+    last->m_navDownName = first->getName();
+}
+#endif
+
 void FJ_List::setAction(unsigned char action, char* value)
 {
     switch (action)

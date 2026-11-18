@@ -82,6 +82,9 @@ public:
     virtual bool blocksInput();
     virtual UIControl* GetMainPanel();
     virtual void render(int width, int height, C4JRender::eViewportType viewport);
+#ifdef MINECRAFT_PC
+    virtual bool fillsWindowBars() { return false; }
+#endif
     virtual void customDraw(const char* name, fuiRect* rect);
     virtual bool allowRepeat(int action);
     virtual void handleInput(int playerId, int action, bool repeat, bool pressed, bool released, bool& handled);

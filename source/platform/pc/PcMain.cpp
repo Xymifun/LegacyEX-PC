@@ -8,6 +8,7 @@
 #include "platform/pc/PcMods.hpp"
 #include "platform/pc/PcNativeMods.hpp"
 #include "platform/pc/PcSettings.hpp"
+#include "platform/pc/PcShaderPacks.hpp"
 #include "platform/pc/PcDedicated.hpp"
 #include "platform/pc/PcNetworkSession.hpp"
 #include "platform/pc/PcVoice.hpp"
@@ -42,6 +43,7 @@
 #include "game/core/L10N.hpp"
 #include "game/core/LeaderboardManager.hpp"
 #include "game/core/Minecraft.hpp"
+#include "game/core/Options.hpp"
 #include "game/core/PIXNamedEvents.hpp"
 #include "game/core/ShutdownManager.hpp"
 #include "game/core/StatsCounter.hpp"
@@ -131,6 +133,8 @@ struct ScriptedText
     bool typed;
 };
 
+double testHangAt = -1.0;
+
 struct LaunchOptions
 {
     LaunchOptions() : seconds(-1), serverDistance(0), profile(false), profileSlowFrame(50.0), profileSyncGpu(false) {}
@@ -159,7 +163,7 @@ struct KeyName
 const KeyName kKeyNames[] = {{"space", 0x20, false},  {"enter", 0x0D, false},    {"escape", 0x1B, false},
                              {"backspace", 0x08, false}, {"tab", 0x09, false},   {"shift", 0x10, false},
                              {"left", 0x25, false},   {"up", 0x26, false},       {"right", 0x27, false},
-                             {"down", 0x28, false},   {"f5", 0x74, false},       {"f2", 0x71, false},       {"f6", 0x75, false},       {"f7", 0x76, false},       {"f8", 0x77, false},       {"f3", 0x72, false},
+                             {"down", 0x28, false},   {"f5", 0x74, false},       {"f1", 0x70, false}, {"f2", 0x71, false},       {"f6", 0x75, false},       {"f7", 0x76, false},       {"f8", 0x77, false},       {"f3", 0x72, false},
                              {"control", 0x11, false}, {"pageup", 0x21, false}, {"pagedown", 0x22, false}, {"mouse1", 0, true},
                              {"mouse2", 1, true},     {"wheelup", 0, false, 1},  {"wheeldown", 0, false, -1},
                              {"home", 0x24, false},   {"end", 0x23, false},      {"delete", 0x2E, false}};
@@ -430,6 +434,8 @@ bool ParseArguments(int argc, char** argv, LaunchOptions* opts)
             else
                 fprintf(stderr, "--phantoms must be on or off\n");
         }
+        else if (strcmp(argv[i], "--shaderpack") == 0 && i + 1 < argc)
+            PcShaderPacksRequestPack(argv[++i]);
         else if (strcmp(argv[i], "--server-distance") == 0 && i + 1 < argc)
             opts->serverDistance = atoi(argv[++i]);
         else if (strcmp(argv[i], "--world-size") == 0 && i + 1 < argc)
@@ -499,8 +505,12 @@ bool ParseArguments(int argc, char** argv, LaunchOptions* opts)
         }
         else if (strcmp(argv[i], "--audio-capture") == 0 && i + 1 < argc)
             PcSetAudioCapture(argv[++i]);
+        else if (strcmp(argv[i], "--mute") == 0)
+            PcSetAudioMuted(true);
         else if (strcmp(argv[i], "--mic-file") == 0 && i + 1 < argc)
             PcVoiceSetFileInput(argv[++i]);
+        else if (strcmp(argv[i], "--test-hang") == 0 && i + 1 < argc)
+            testHangAt = atof(argv[++i]);
         else if (strcmp(argv[i], "--mic-test") == 0)
             PcVoiceRequestTestAtStart();
         else if (strcmp(argv[i], "--voice-chat") == 0)
@@ -705,7 +715,7 @@ void ApplyGameKeys(Minecraft* mc, int pad)
     if (PcDebugFreeCrafting() && (p->mDebugOptions & kFreeCrafting) == 0 && mc->mGameModes[pad] != 0)
         mc->mGameModes[pad]->handleDebugOptions(p->mDebugOptions | kFreeCrafting, p);
 
-    if (PcInputSprintHeld() && !p->isSprinting() && (p->mOnGround || p->isInWater())
+    if ((PcInputSprintHeld() || PcInputModSprintHeld()) && !p->isSprinting() && (p->mOnGround || p->isInWater())
         && !p->isSneaking() && !p->isUsingItem()
         && (p->getFoodData()->getFoodLevel() > FoodConstants::SprintLevel() || p->mAbilities.mMayfly
             || p->isAllowedToFly()))
@@ -782,6 +792,8 @@ void RunFrame(Minecraft* minecraft)
     PcScriptsClientFrame(minecraft);
     PcNativeModsFrame();
     TakeKeyScreenshot();
+    if (PcInputConsumeHideHudKey())
+        minecraft->mOptions->mHideGui = !minecraft->mOptions->mHideGui;
     float hoverX = 0.0f;
     float hoverY = 0.0f;
     if (PcInputConsumeHover(&hoverX, &hoverY))
@@ -926,6 +938,7 @@ int main(int argc, char** argv)
 
     unsigned long long start = PcOsMonotonicNanoseconds();
     unsigned long long frames = 0;
+    PcHangWatchdogStart();
     unsigned long long lastFrame = ~0ULL;
     bool quitRequested = false;
     bool stopping = false;
@@ -941,6 +954,12 @@ int main(int argc, char** argv)
         }
         PIXEndNamedEvent();
         RunScriptedInput(options, static_cast<double>(PcOsMonotonicNanoseconds() - start) / 1e9);
+        PcHangWatchdogBeat();
+        if (testHangAt >= 0.0 && (double)(PcOsMonotonicNanoseconds() - start) / 1e9 >= testHangAt)
+        {
+            testHangAt = -1.0;
+            PcOsSleepMilliseconds(12000);
+        }
         RunFrame(minecraft);
         PcDebugOverlayFrame();
         PIXBeginNamedEvent(0.0f, "World launcher tick");

@@ -162,6 +162,116 @@ void PcCrashHandlerPrepareThread()
     SetThreadStackGuarantee(&size);
 }
 
+namespace
+{
+const DWORD HANG_SECONDS = 8;
+HANDLE mainThread = 0;
+volatile LONG beats = 0;
+
+void WriteAddress(DWORD64 a)
+{
+    HMODULE mod = 0;
+    char name[MAX_PATH] = "?";
+    if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           (LPCSTR)a, &mod) && mod != 0)
+    {
+        char path[MAX_PATH];
+        DWORD n = GetModuleFileNameA(mod, path, MAX_PATH);
+        const char* base = path;
+        for (DWORD i = 0; i < n; i++)
+            if (path[i] == '\\' || path[i] == '/') base = path + i + 1;
+        if (n > 0) lstrcpynA(name, base, MAX_PATH);
+    }
+    Write(" " ADDRESS " (%s+0x%I64x)", (Address)a, name, (unsigned long long)(a - (DWORD64)(uintptr_t)mod));
+}
+
+void WriteMainStack()
+{
+    CONTEXT ctx;
+    ZeroMemory(&ctx, sizeof(ctx));
+    ctx.ContextFlags = CONTEXT_FULL;
+    if (SuspendThread(mainThread) == (DWORD)-1)
+        return;
+    BOOL ok = GetThreadContext(mainThread, &ctx);
+    ResumeThread(mainThread);
+    if (!ok)
+        return;
+    Write("[pc] hang: main thread stack:\n");
+    WriteAddress(ctx.CONTEXT_IP);
+#ifdef _WIN64
+    CONTEXT uw = ctx;
+    for (int d = 0; d < 40; ++d)
+    {
+        DWORD64 base = 0;
+        PRUNTIME_FUNCTION fn = RtlLookupFunctionEntry(uw.Rip, &base, 0);
+        if (fn == 0)
+        {
+            if (IsBadReadPtr((const void*)uw.Rsp, sizeof(DWORD64)))
+                break;
+            uw.Rip = *(const DWORD64*)uw.Rsp;
+            uw.Rsp += sizeof(DWORD64);
+        }
+        else
+        {
+            void* handlerData = 0;
+            DWORD64 frame = 0;
+            RtlVirtualUnwind(UNW_FLAG_NHANDLER, base, uw.Rip, fn, &uw, &handlerData, &frame, 0);
+        }
+        if (uw.Rip == 0)
+            break;
+        Write("\n");
+        WriteAddress(uw.Rip);
+    }
+#endif
+    Write("\n");
+}
+
+DWORD WINAPI WatchdogThread(void*)
+{
+    LONG seen = beats;
+    DWORD still = 0;
+    DWORD reported = 0;
+    for (;;)
+    {
+        Sleep(1000);
+        LONG now = beats;
+        if (now != seen)
+        {
+            if (reported != 0)
+                Write("[pc] hang: main loop moving again after %lu s\n", (unsigned long)still);
+            seen = now;
+            still = 0;
+            reported = 0;
+            continue;
+        }
+        still++;
+        if (still == HANG_SECONDS || (reported != 0 && still - reported >= 30))
+        {
+            Write("[pc] hang: no frame for %lu s\n", (unsigned long)still);
+            WriteMainStack();
+            reported = still;
+        }
+    }
+    return 0;
+}
+}
+
+void PcHangWatchdogStart()
+{
+    if (mainThread != 0)
+        return;
+    DuplicateHandle(GetCurrentProcess(), GetCurrentThread(), GetCurrentProcess(), &mainThread,
+                    THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT | THREAD_QUERY_INFORMATION, FALSE, 0);
+    HANDLE t = CreateThread(0, 64 * 1024, WatchdogThread, 0, 0, 0);
+    if (t != 0)
+        CloseHandle(t);
+}
+
+void PcHangWatchdogBeat()
+{
+    InterlockedIncrement(&beats);
+}
+
 void PcInstallCrashHandler()
 {
     SetUnhandledExceptionFilter(ReportCrash);
@@ -181,6 +291,14 @@ void PcCrashHandlerPrepareThread()
 }
 
 void PcInstallCrashHandler()
+{
+}
+
+void PcHangWatchdogStart()
+{
+}
+
+void PcHangWatchdogBeat()
 {
 }
 

@@ -6,6 +6,10 @@
 #include "game/ui/UIControl_Label.hpp"
 #include "game/core/CMinecraftApp.hpp"
 
+#ifdef MINECRAFT_PC
+void PcMessageBoxConfirmTwice();
+#endif
+
 class UIScene_MessageBox : public UIScene
 {
 public:
@@ -32,6 +36,9 @@ private:
     bool m_alert;
 #ifdef MINECRAFT_PC
     bool m_wide;
+    bool m_confirmTwice;
+    bool m_armed;
+    std::wstring m_firstLabel;
 #endif
     UIControl_Button m_buttons[4];
     UIControl_Label m_title;

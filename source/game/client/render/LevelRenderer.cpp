@@ -80,6 +80,10 @@
 #ifdef MINECRAFT_PC
 #include "platform/pc/PcSettings.hpp"
 #include "platform/pc/PcModViews.hpp"
+#include "platform/pc/PcShaderPacks.hpp"
+
+static int cloudList = -1;
+static int cloudListRadius = -1;
 
 static int ChunkGridWidth(int activePlayers)
 {
@@ -118,6 +122,30 @@ int gChunkDimensionBases[4] = {0, 0x19000, 0x1a900, 0x1c640};
 #endif
 
 LevelRenderer* gLevelRenderer;
+
+#ifdef MINECRAFT_PC
+static const float HORIZON_TOP = 16.0f;
+static const float HORIZON_BOTTOM = -16.0f;
+static const float HORIZON_MAX_RADIUS = 256.0f;
+
+static void DrawPackHorizon(float r, float g, float b)
+{
+    float radius = (float)(PcSettingsRenderDistance() * 16);
+    if (radius > HORIZON_MAX_RADIUS)
+        radius = HORIZON_MAX_RADIUS;
+
+    BufferBuilder* bb = Tesselator::getInstance()->getBuilder();
+    bb->begin(2);
+    bb->color(r, g, b, 1.0f);
+    bb->vertex(0.0f, HORIZON_BOTTOM, 0.0f);
+    for (int i = 0; i <= 8; i++)
+    {
+        float angle = (float)i * -3.14159265f / 4.0f;
+        bb->vertex(radius * Mth::cos(angle), HORIZON_TOP, radius * Mth::sin(angle));
+    }
+    bb->end();
+}
+#endif
 
 int getChunkIndex(int dimension, int x, int y, int z)
 {
@@ -1135,6 +1163,9 @@ void LevelRenderer::renderEntities(boost::shared_ptr<Entity> camera, Culler* cul
         ++mCountEntitiesRendered;
         if (globalEntity->shouldRender(camZ, camY, camZ))
         {
+#ifdef MINECRAFT_PC
+            PcShaderPacksSetEntity(globalEntity.get());
+#endif
             mEntityRenderDispatcher->render(globalEntity, partialTick, false);
         }
     }
@@ -1200,6 +1231,9 @@ void LevelRenderer::renderEntities(boost::shared_ptr<Entity> camera, Culler* cul
         }
 
         ++mCountEntitiesRendered;
+#ifdef MINECRAFT_PC
+        PcShaderPacksSetEntity(entity.get());
+#endif
         mEntityRenderDispatcher->render(entity, partialTick, false);
 
         if (shouldEntityGlow(entity, positionDispatcherCamera, culler))
@@ -1215,8 +1249,15 @@ void LevelRenderer::renderEntities(boost::shared_ptr<Entity> camera, Culler* cul
 
     for (unsigned int secondPassIndex = 0; secondPassIndex < secondPassEntities.size(); ++secondPassIndex)
     {
+#ifdef MINECRAFT_PC
+        PcShaderPacksSetEntity(secondPassEntities[secondPassIndex].get());
+#endif
         mEntityRenderDispatcher->renderSecondPass(secondPassEntities[secondPassIndex], partialTick);
     }
+#ifdef MINECRAFT_PC
+    PcShaderPacksClearEntity();
+    PcShaderPacksSetStage(ShaderRenderStage_BlockEntities);
+#endif
 
     PIXEndNamedEvent();
     InfoBarManager::EndTimingCategory(InfoBarManager::eTimingCagegory_Entities);
@@ -1251,12 +1292,18 @@ void LevelRenderer::renderEntities(boost::shared_ptr<Entity> camera, Culler* cul
                 }
             }
 
+#ifdef MINECRAFT_PC
+            PcShaderPacksSetBlockEntity(blockEntity.get());
+#endif
             BlockEntityRenderDispatcher::instance->render(blockEntity, partialTick);
         }
     }
 
     for (unsigned int deferredIndex = 0; deferredIndex < deferredBlockEntities.size(); ++deferredIndex)
     {
+#ifdef MINECRAFT_PC
+        PcShaderPacksSetBlockEntity(deferredBlockEntities[deferredIndex].get());
+#endif
         BlockEntityRenderDispatcher::instance->render(deferredBlockEntities[deferredIndex], partialTick);
     }
 
@@ -1271,6 +1318,9 @@ void LevelRenderer::renderEntities(boost::shared_ptr<Entity> camera, Culler* cul
              mRenderableBlockEntities.begin();
          renderableIt != mRenderableBlockEntities.end(); ++renderableIt)
     {
+#ifdef MINECRAFT_PC
+        PcShaderPacksSetBlockEntity(renderableIt->get());
+#endif
         BlockEntityRenderDispatcher::instance->render(*renderableIt, partialTick, -1, true);
     }
 
@@ -1347,6 +1397,9 @@ void LevelRenderer::renderEntities(boost::shared_ptr<Entity> camera, Culler* cul
     }
 
     restoreDestroyState();
+#ifdef MINECRAFT_PC
+    PcShaderPacksClearEntity();
+#endif
 
     PIXEndNamedEvent();
     LeaveCriticalSection(&mBlockEntityMutex);
@@ -1491,6 +1544,10 @@ int LevelRenderer::renderChunks(int first, int count, int layer, double partialT
         std::vector<int> visibleChunks;
         unsigned int chunkCount = mClipChunks[userIndex].length;
         visibleChunks.reserve(chunkCount);
+#ifdef MINECRAFT_PC
+        const bool byDistance = layer == 0 || PcShaderPacksActive();
+        std::vector<std::pair<float, int> > distances;
+#endif
 
         for (unsigned int index = 0; index < chunkCount; ++index, ++chunk)
         {
@@ -1504,9 +1561,28 @@ int LevelRenderer::renderChunks(int first, int count, int layer, double partialT
                     bucket = 0x7f;
 #endif
                 visibleChunks.push_back(globalIndex | bucket << 24);
+#ifdef MINECRAFT_PC
+                if (byDistance)
+                {
+                    const float dx = (chunk->mMinX + chunk->mMaxX) * 0.5f - (float)camX;
+                    const float dy = (chunk->mMinY + chunk->mMaxY) * 0.5f - (float)camY;
+                    const float dz = (chunk->mMinZ + chunk->mMaxZ) * 0.5f - (float)camZ;
+                    const float distance = dx * dx + dy * dy + dz * dz;
+                    distances.push_back(std::make_pair(layer == 0 ? distance : -distance,
+                                                       visibleChunks.back()));
+                }
+#endif
                 ++visibleCount;
             }
         }
+#ifdef MINECRAFT_PC
+        if (byDistance)
+        {
+            std::sort(distances.begin(), distances.end());
+            for (size_t index = 0; index < distances.size(); ++index)
+                visibleChunks[index] = distances[index].second;
+        }
+#endif
 
         unsigned int visibleSize = visibleChunks.size();
 
@@ -1521,11 +1597,16 @@ int LevelRenderer::renderChunks(int first, int count, int layer, double partialT
             }
         }
         std::vector<int> ids;
+        std::vector<unsigned char> masks;
         ids.reserve(visibleSize - index);
+        masks.reserve(visibleSize - index);
         for (; index < visibleSize; ++index)
+        {
             ids.push_back((int)(visibleChunks[index] & 0xffffff) * 3 + layer + mDisplayList);
+            masks.push_back((unsigned char)(visibleChunks[index] >> 24));
+        }
         if (!ids.empty())
-            gRenderer->CBuffCallRun(&ids[0], (int)ids.size());
+            gRenderer->CBuffCallRun(&ids[0], (int)ids.size(), &masks[0]);
 #else
         for (unsigned int index = 0; index < visibleSize; ++index)
         {
@@ -1543,6 +1624,262 @@ int LevelRenderer::renderChunks(int first, int count, int layer, double partialT
 
     return visibleCount;
 }
+
+#ifdef MINECRAFT_PC
+namespace
+{
+bool ShadowBoxVisible(double minX, double minY, double minZ, double maxX, double maxY, double maxZ, double cameraX,
+                      double cameraY, double cameraZ, const float* view, const float* projection)
+{
+    float matrix[16];
+    for (int column = 0; column < 4; ++column)
+    {
+        for (int row = 0; row < 4; ++row)
+        {
+            float sum = 0.0f;
+            for (int k = 0; k < 4; ++k)
+                sum += projection[k * 4 + row] * view[column * 4 + k];
+            matrix[column * 4 + row] = sum;
+        }
+    }
+
+    int outside[4] = {0, 0, 0, 0};
+    for (int corner = 0; corner < 8; ++corner)
+    {
+        float x = (float)(((corner & 1) ? maxX : minX) - cameraX);
+        float y = (float)(((corner & 2) ? maxY : minY) - cameraY);
+        float z = (float)(((corner & 4) ? maxZ : minZ) - cameraZ);
+        float clipX = matrix[0] * x + matrix[4] * y + matrix[8] * z + matrix[12];
+        float clipY = matrix[1] * x + matrix[5] * y + matrix[9] * z + matrix[13];
+        float clipW = matrix[3] * x + matrix[7] * y + matrix[11] * z + matrix[15];
+        if (clipX < -clipW)
+            ++outside[0];
+        if (clipX > clipW)
+            ++outside[1];
+        if (clipY < -clipW)
+            ++outside[2];
+        if (clipY > clipW)
+            ++outside[3];
+    }
+
+    return outside[0] < 8 && outside[1] < 8 && outside[2] < 8 && outside[3] < 8;
+}
+
+bool ShadowChunkVisible(const ClipChunk* chunk, double cameraX, double cameraY, double cameraZ, const float* view,
+                        const float* projection)
+{
+    return ShadowBoxVisible(chunk->mMinX, chunk->mMinY, chunk->mMinZ, chunk->mMaxX, chunk->mMaxY, chunk->mMaxZ, cameraX,
+                            cameraY, cameraZ, view, projection);
+}
+}
+
+int LevelRenderer::renderShadowChunks(int layer, double partialTick, float distance, const float* shadowView,
+                                      const float* shadowProjection)
+{
+    int userIndex = mMinecraft->mPlayer->mUserIndex;
+
+    mMinecraft->mGameRenderer->turnOnLightLayer(partialTick);
+    mTextures->bindTexture(&BLOCKS_LOCATION);
+    GlStateManager::enableAlphaTest();
+    GlStateManager::alphaFunc(4, 0.5f);
+
+    boost::shared_ptr<Entity> camera = mMinecraft->getCameraEntity();
+
+    double camX = (camera->mX - camera->mXOld) * partialTick + camera->mXOld;
+    double camY = (camera->mY - camera->mYOld) * partialTick + camera->mYOld;
+    double camZ = (camera->mZ - camera->mZOld) * partialTick + camera->mZOld;
+
+    GlStateManager::pushMatrix();
+    GlStateManager::translatef(-(float)camX, -(float)camY, -(float)camZ);
+
+    if (layer == 2)
+    {
+        unsigned int waterColor = Biome::OCEAN->getWaterColor();
+        gRenderer->StateSetVertexAlpha((float)(int)(waterColor >> 24) / 255.0f);
+    }
+
+    double maxDistanceSq = distance > 0.0f ? (double)distance * (double)distance : 1.0e30;
+    bool running = true;
+    unsigned int mask = (unsigned int)(4 << (layer & 0x3f)) & 0xff;
+    int drawn = 0;
+    std::vector<int> ids;
+    ClipChunk* chunk = mClipChunks[userIndex].data;
+    unsigned int chunkCount = mClipChunks[userIndex].length;
+
+    for (unsigned int index = 0; index < chunkCount; ++index, ++chunk)
+    {
+        if (chunk->mGlobalIndex == -1 || (mask & mGlobalChunkFlags[chunk->mGlobalIndex]) == mask)
+        {
+            continue;
+        }
+
+        double dx = (chunk->mMinX + chunk->mMaxX) * 0.5 - camX;
+        double dz = (chunk->mMinZ + chunk->mMaxZ) * 0.5 - camZ;
+        if (dx * dx + dz * dz > maxDistanceSq)
+        {
+            continue;
+        }
+
+        if (!ShadowChunkVisible(chunk, camX, camY, camZ, shadowView, shadowProjection))
+        {
+            continue;
+        }
+
+        ids.push_back(chunk->mGlobalIndex * 3 + layer + mDisplayList);
+        ++drawn;
+    }
+
+    unsigned int index = 0;
+    for (; index < ids.size() && running; ++index)
+    {
+        if (gRenderer->CBuffCall(ids[index], running, 0x7f))
+            running = false;
+    }
+    if (index < ids.size())
+        gRenderer->CBuffCallRun(&ids[index], (int)(ids.size() - index));
+
+    GlStateManager::popMatrix();
+    mMinecraft->mGameRenderer->turnOffLightLayer(partialTick);
+    return drawn;
+}
+
+int LevelRenderer::renderShadowEntities(double partialTick, float distance, const float* shadowView,
+                                        const float* shadowProjection, bool entities, bool player,
+                                        bool blockEntities)
+{
+    int userIndex = mMinecraft->mPlayer->mUserIndex;
+    Level* level = mLevels[userIndex];
+    if (level == NULL)
+    {
+        return 0;
+    }
+
+    float tick = (float)partialTick;
+    boost::shared_ptr<Entity> camera = mMinecraft->getCameraEntity();
+    BlockEntityRenderDispatcher::instance->prepare(level, mTextures, mMinecraft->mFont, camera, mMinecraft->mHitResult,
+                                                   tick);
+    mEntityRenderDispatcher->prepare(level, mMinecraft->mFont, camera, mMinecraft->mSpectateEntity,
+                                     mMinecraft->mOptions, tick);
+
+    double camX = (camera->mX - camera->mXOld) * partialTick + camera->mXOld;
+    double camY = (camera->mY - camera->mYOld) * partialTick + camera->mYOld;
+    double camZ = (camera->mZ - camera->mZOld) * partialTick + camera->mZOld;
+    BlockEntityRenderDispatcher::xOff = camX;
+    BlockEntityRenderDispatcher::yOff = camY;
+    BlockEntityRenderDispatcher::zOff = camZ;
+    mEntityRenderDispatcher->setPosition(camX, camY, camZ);
+
+    double maxDistanceSq = distance > 0.0f ? (double)distance * (double)distance : 1.0e30;
+    int drawn = 0;
+    mMinecraft->mGameRenderer->turnOnLightLayer(partialTick);
+
+    if (entities || player)
+    {
+        std::vector<boost::shared_ptr<Entity> > allEntities = level->getAllEntities();
+        std::vector<boost::shared_ptr<Entity> > secondPassEntities;
+        for (unsigned int entityIndex = 0; entityIndex < allEntities.size(); ++entityIndex)
+        {
+            boost::shared_ptr<Entity>& entity = allEntities[entityIndex];
+            if (entity == camera ? !player : !entities)
+            {
+                continue;
+            }
+
+            double dx = entity->mX - camX;
+            double dz = entity->mZ - camZ;
+            if (dx * dx + dz * dz > maxDistanceSq)
+            {
+                continue;
+            }
+
+            AABB* box = entity->mBoundingBox;
+            if (box != NULL
+                && !ShadowBoxVisible(box->mMinX - 0.5, box->mMinY - 0.5, box->mMinZ - 0.5, box->mMaxX + 0.5,
+                                     box->mMaxY + 0.5, box->mMaxZ + 0.5, camX, camY, camZ, shadowView,
+                                     shadowProjection))
+            {
+                continue;
+            }
+
+            if (entity->mY >= 0.0 && entity->mY < 256.0)
+            {
+                BlockPos entityBlockPos(Mth::floor(entity->mX), 0, Mth::floor(entity->mZ));
+                if (!level->hasChunkAt(entityBlockPos))
+                {
+                    continue;
+                }
+            }
+
+            PcShaderPacksSetEntity(entity.get());
+            mEntityRenderDispatcher->render(entity, tick, false);
+            if (mEntityRenderDispatcher->hasSecondPass(entity))
+            {
+                secondPassEntities.push_back(entity);
+            }
+            ++drawn;
+        }
+
+        for (unsigned int secondPassIndex = 0; secondPassIndex < secondPassEntities.size(); ++secondPassIndex)
+        {
+            PcShaderPacksSetEntity(secondPassEntities[secondPassIndex].get());
+            mEntityRenderDispatcher->renderSecondPass(secondPassEntities[secondPassIndex], tick);
+        }
+        PcShaderPacksClearEntity();
+    }
+
+    if (blockEntities)
+    {
+        EnterCriticalSection(&mBlockEntityMutex);
+        for (ChunkBlockEntityMap::iterator bucketIt = mBlockEntities.begin(); bucketIt != mBlockEntities.end(); ++bucketIt)
+        {
+            if (!isGlobalIndexInSameDimension(bucketIt->first, level))
+            {
+                continue;
+            }
+
+            std::vector<boost::shared_ptr<BlockEntity> >& bucket = bucketIt->second;
+            for (unsigned int bucketIndex = 0; bucketIndex < bucket.size(); ++bucketIndex)
+            {
+                boost::shared_ptr<BlockEntity>& blockEntity = bucket[bucketIndex];
+                const BlockPos& position = blockEntity->getBlockPos();
+                double dx = position.x + 0.5 - camX;
+                double dz = position.z + 0.5 - camZ;
+                if (dx * dx + dz * dz > maxDistanceSq)
+                {
+                    continue;
+                }
+
+                if (!ShadowBoxVisible(position.x - 1.0, position.y - 1.0, position.z - 1.0, position.x + 2.0,
+                                      position.y + 2.0, position.z + 2.0, camX, camY, camZ, shadowView,
+                                      shadowProjection))
+                {
+                    continue;
+                }
+
+                PcShaderPacksSetBlockEntity(blockEntity.get());
+                BlockEntityRenderDispatcher::instance->render(blockEntity, tick);
+                ++drawn;
+            }
+        }
+        LeaveCriticalSection(&mBlockEntityMutex);
+
+        EnterCriticalSection(&mRenderableBlockEntityMutex);
+        for (boost::unordered_set<boost::shared_ptr<BlockEntity> >::iterator renderableIt =
+                 mRenderableBlockEntities.begin();
+             renderableIt != mRenderableBlockEntities.end(); ++renderableIt)
+        {
+            PcShaderPacksSetBlockEntity(renderableIt->get());
+            BlockEntityRenderDispatcher::instance->render(*renderableIt, tick, -1, true);
+            ++drawn;
+        }
+        LeaveCriticalSection(&mRenderableBlockEntityMutex);
+        PcShaderPacksClearEntity();
+    }
+
+    mMinecraft->mGameRenderer->turnOffLightLayer(partialTick);
+    return drawn;
+}
+#endif
 
 void LevelRenderer::render(boost::shared_ptr<Entity> camera, int layer, double partialTick, bool sort)
 {
@@ -1664,6 +2001,18 @@ void LevelRenderer::renderSky(float partialTick)
         partialTick = 0.0f;
     }
 
+#ifdef MINECRAFT_PC
+    if (PcShaderPacksRenderHorizon() && mLevels[userIndex]->mDimension->isHasSkyLight())
+    {
+        float fog[3];
+        mMinecraft->mGameRenderer->PcGetFogColour(fog);
+        GlStateManager::depthMask(false);
+        GlStateManager::disableCull();
+        DrawPackHorizon(fog[0], fog[1], fog[2]);
+        GlStateManager::enableCull();
+    }
+#endif
+
     Vec3* skyColor = mLevels[userIndex]->getSkyColor(mMinecraft->getCameraEntity(), partialTick);
     float red = (float)skyColor->x;
     float green = (float)skyColor->y;
@@ -1698,6 +2047,9 @@ void LevelRenderer::renderSky(float partialTick)
 
     if (sunriseColors != 0)
     {
+#ifdef MINECRAFT_PC
+        PcShaderPacksSetStage(ShaderRenderStage_Sunset);
+#endif
         GlStateManager::disableTexture();
         GlStateManager::shadeModel(0);
         GlStateManager::color4f(1.0f, 1.0f, 1.0f, 1.0f);
@@ -1754,8 +2106,18 @@ void LevelRenderer::renderSky(float partialTick)
     GlStateManager::rotatef(-90.0f, 0.0f, 1.0f, 0.0f);
     GlStateManager::rotatef(mLevels[userIndex]->getTimeOfDay(partialTick) * 360.0f, 1.0f, 0.0f, 0.0f);
 
-    if (sunAngleDegrees <= 125.0f || 235.0f <= sunAngleDegrees)
+    bool drawSun = true;
+    bool drawMoon = true;
+#ifdef MINECRAFT_PC
+    drawSun = PcShaderPacksRenderSun();
+    drawMoon = PcShaderPacksRenderMoon();
+#endif
+
+    if (drawSun && (sunAngleDegrees <= 125.0f || 235.0f <= sunAngleDegrees))
     {
+#ifdef MINECRAFT_PC
+        PcShaderPacksSetStage(ShaderRenderStage_Sun);
+#endif
         MemSect(0x1f);
         mTextures->bindTexture(&sSunLocation);
         MemSect(0);
@@ -1768,8 +2130,11 @@ void LevelRenderer::renderSky(float partialTick)
         builder->end();
     }
 
-    if (moonAngleDegrees <= 125.0f || 235.0f <= moonAngleDegrees)
+    if (drawMoon && (moonAngleDegrees <= 125.0f || 235.0f <= moonAngleDegrees))
     {
+#ifdef MINECRAFT_PC
+        PcShaderPacksSetStage(ShaderRenderStage_Moon);
+#endif
         mTextures->bindTexture(&sMoonPhasesLocation);
 
         int moonPhase = mLevels[userIndex]->getMoonPhase();
@@ -1794,6 +2159,9 @@ void LevelRenderer::renderSky(float partialTick)
 
     if (starBrightness > 0.0f)
     {
+#ifdef MINECRAFT_PC
+        PcShaderPacksSetStage(ShaderRenderStage_Stars);
+#endif
         GlStateManager::color4f(starBrightness, starBrightness, starBrightness, starBrightness);
         GlStateManager::callList(mStarList);
     }
@@ -1805,6 +2173,9 @@ void LevelRenderer::renderSky(float partialTick)
     GlStateManager::popMatrix();
     GlStateManager::disableTexture();
     GlStateManager::color3f(0.0f, 0.0f, 0.0f);
+#ifdef MINECRAFT_PC
+    PcShaderPacksSetStage(ShaderRenderStage_Sky);
+#endif
 
     if (!mLevels[userIndex]->mDimension->hasGround())
     {
@@ -1990,6 +2361,93 @@ void LevelRenderer::renderAdvancedClouds(float partialTick, int pass, double x, 
 
     int gridMin = 1 - gridRadius;
 
+#ifdef MINECRAFT_PC
+    if (!cameraInCloudBand)
+    {
+        if (cloudList < 0 || cloudListRadius != gridRadius)
+        {
+            if (cloudList < 0)
+                cloudList = MemoryTracker::genLists(1);
+            cloudListRadius = gridRadius;
+            BufferBuilder* b = Tesselator::getInstance()->getBuilder();
+            GlStateManager::newList(cloudList, 0);
+            b->begin();
+            for (int row = gridMin; row <= gridRadius; ++row)
+            {
+                for (int col = gridMin; col <= gridRadius; ++col)
+                {
+                    float ox = (float)(row * 8);
+                    float oz = (float)(col * 8);
+                    for (int z = 0; z < 8; ++z)
+                    {
+                        for (int x = 0; x < 8; ++x)
+                        {
+                            float u = ((float)x + 0.5f + ox) * 0.00390625f;
+                            float v = ((float)z + 0.5f + oz) * 0.00390625f;
+                            float x0 = ox + (float)x;
+                            float x1 = x0 + 1.0f;
+                            float z0 = oz + (float)z;
+                            float z1 = z0 + 1.0f;
+                            b->color(0.7f, 0.7f, 0.7f, 0.8f);
+                            b->normal(0.0f, -1.0f, 0.0f);
+                            b->vertexUV(x0, 0.0f, z0, u, v);
+                            b->vertexUV(x1, 0.0f, z0, u, v);
+                            b->vertexUV(x1, 0.0f, z1, u, v);
+                            b->vertexUV(x0, 0.0f, z1, u, v);
+                            b->color(1.0f, 1.0f, 1.0f, 0.8f);
+                            b->normal(0.0f, 1.0f, 0.0f);
+                            b->vertexUV(x0, 4.0f, z1, u, v);
+                            b->vertexUV(x1, 4.0f, z1, u, v);
+                            b->vertexUV(x1, 4.0f, z0, u, v);
+                            b->vertexUV(x0, 4.0f, z0, u, v);
+                            b->color(0.9f, 0.9f, 0.9f, 0.8f);
+                            b->normal(-1.0f, 0.0f, 0.0f);
+                            b->vertexUV(x0, 0.0f, z1, u, v);
+                            b->vertexUV(x0, 4.0f, z1, u, v);
+                            b->vertexUV(x0, 4.0f, z0, u, v);
+                            b->vertexUV(x0, 0.0f, z0, u, v);
+                            b->normal(1.0f, 0.0f, 0.0f);
+                            b->vertexUV(x1, 0.0f, z0, u, v);
+                            b->vertexUV(x1, 4.0f, z0, u, v);
+                            b->vertexUV(x1, 4.0f, z1, u, v);
+                            b->vertexUV(x1, 0.0f, z1, u, v);
+                            b->color(0.8f, 0.8f, 0.8f, 0.8f);
+                            b->normal(-1.0f, 0.0f, 0.0f);
+                            b->vertexUV(x0, 4.0f, z0, u, v);
+                            b->vertexUV(x1, 4.0f, z0, u, v);
+                            b->vertexUV(x1, 0.0f, z0, u, v);
+                            b->vertexUV(x0, 0.0f, z0, u, v);
+                            b->normal(1.0f, 0.0f, 0.0f);
+                            b->vertexUV(x0, 0.0f, z1, u, v);
+                            b->vertexUV(x1, 0.0f, z1, u, v);
+                            b->vertexUV(x1, 4.0f, z1, u, v);
+                            b->vertexUV(x0, 4.0f, z1, u, v);
+                        }
+                    }
+                }
+            }
+            b->end();
+            GlStateManager::endList(0);
+        }
+
+        GlStateManager::matrixMode(2);
+        GlStateManager::loadIdentity();
+        GlStateManager::translatef(wrapAnchorX, wrapAnchorZ, 0.0f);
+        GlStateManager::matrixMode(0);
+        GlStateManager::pushMatrix();
+        GlStateManager::translatef(-fracX, cloudRelativeY, -fracZ);
+        GlStateManager::color4f(red, green, blue, alpha);
+        GlStateManager::blendFunc(0, 1);
+        GlStateManager::callList(cloudList);
+        GlStateManager::blendFunc(4, 5);
+        GlStateManager::callList(cloudList);
+        GlStateManager::popMatrix();
+        GlStateManager::matrixMode(2);
+        GlStateManager::loadIdentity();
+        GlStateManager::matrixMode(0);
+    }
+    else
+#endif
     for (int blendPass = 0; blendPass < 2; ++blendPass)
     {
         if (blendPass == 0)

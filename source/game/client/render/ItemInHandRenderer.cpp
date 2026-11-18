@@ -42,6 +42,9 @@
 #include "game/world/generation/MultiplayerLocalPlayer.hpp"
 #include "game/world/generation/Player.hpp"
 #include "game/util/ResourceLocation.hpp"
+#ifdef MINECRAFT_PC
+#include "platform/pc/PcShaderPacks.hpp"
+#endif
 
 namespace
 {
@@ -1021,6 +1024,9 @@ void ItemInHandRenderer::renderScreenEffect(float partialTick)
     {
         if (mMinecraft->mPlayer->isUnderLiquid(Material::WATER))
         {
+#ifdef MINECRAFT_PC
+            if (PcShaderPacksUnderwaterOverlay())
+#endif
             renderWater(partialTick);
         }
         if (mMinecraft->mPlayer->isOnFire())

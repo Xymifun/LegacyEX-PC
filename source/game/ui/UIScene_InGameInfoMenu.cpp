@@ -2,6 +2,9 @@
 #ifdef MINECRAFT_PC
 #include "platform/pc/PcDedicated.hpp"
 #include "platform/pc/PcVoice.hpp"
+#include "platform/pc/PcFriendsMenu.hpp"
+#include "platform/pc/PcOnlineConnection.hpp"
+#include <string.h>
 #endif
 #include "game/core/StringIds.hpp"
 
@@ -142,6 +145,19 @@ bool UIScene_InGameInfoMenu::hasSomethingToEdit(unsigned char smallId)
     return result;
 }
 
+#ifdef MINECRAFT_PC
+static bool ProfileTarget(INetworkPlayer* player, unsigned char uuid[16])
+{
+    if (player == NULL || player->IsLocal() || !PcOnlineConnectionIsFriendsLobby())
+        return false;
+    PlayerUID uid = player->GetUID();
+    if ((uid.flags & PlayerUID::FlagUuid) == 0)
+        return false;
+    memcpy(uuid, uid.uuid.data, 16);
+    return true;
+}
+#endif
+
 void UIScene_InGameInfoMenu::updateTooltips()
 {
     int yTooltip = -1;
@@ -179,6 +195,9 @@ void UIScene_InGameInfoMenu::updateTooltips()
         INetworkPlayer* player = CGameNetworkManager::sInstance.GetPlayerBySmallId(m_players[selected]->smallId);
         if (player != NULL && !player->IsLocal() && player->HasVoice())
             partyTooltip = static_cast<int>(PcVoiceMuted(player->GetSmallId()) ? ePcString_Unmute : ePcString_Mute);
+        unsigned char uuid[16];
+        if (ProfileTarget(player, uuid))
+            yTooltip = (int)ePcString_Profile;
     }
 #endif
     gConsoleUIController.SetTooltips(m_playerId, tooltip, static_cast<int>(IDS_TOOLTIPS_BACK), partyTooltip, yTooltip,
@@ -272,6 +291,13 @@ void UIScene_InGameInfoMenu::handleInput(int playerId, int action, bool repeat, 
         INetworkPlayer* player = CGameNetworkManager::sInstance.GetPlayerBySmallId(m_players[selection]->smallId);
         if (player == NULL)
             return;
+#ifdef MINECRAFT_PC
+        {
+            unsigned char uuid[16];
+            if (ProfileTarget(player, uuid))
+                PcOpenProfile(m_playerId, m_players[selection]->name, uuid);
+        }
+#endif
         PlayerUID uid = player->GetUID();
         uid != PlayerUID(0);
         return;

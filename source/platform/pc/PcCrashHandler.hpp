@@ -3,5 +3,7 @@
 
 void PcInstallCrashHandler();
 void PcCrashHandlerPrepareThread();
+void PcHangWatchdogStart();
+void PcHangWatchdogBeat();
 
 #endif

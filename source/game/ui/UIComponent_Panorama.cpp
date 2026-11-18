@@ -122,7 +122,7 @@ void UIComponent_Panorama::render(int width, int height, C4JRender::eViewportTyp
     else
     {
 #ifdef MINECRAFT_PC
-        const bool cover = viewport == C4JRender::eViewportType_FullScreen && !gApp.GetGameStarted();
+        const bool cover = viewport == C4JRender::eViewportType_FullScreen;
         PcSetCoverUiPass(cover);
 #endif
         UIScene::render(width, height, viewport);

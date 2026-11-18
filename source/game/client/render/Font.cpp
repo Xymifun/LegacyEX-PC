@@ -15,6 +15,10 @@
 #include "game/util/ResourceLocation.hpp"
 #include "game/world/biome/arrayWithLength.hpp"
 
+#ifdef MINECRAFT_PC
+static int textAlpha = 255;
+#endif
+
 Font::Font(Options* options, const std::wstring& name, Textures* textures, bool, ResourceLocation* textureLocation,
            int columns, int rows, int characterWidth, int characterHeight, unsigned short* characterMap)
     : mTextures(textures),
@@ -222,7 +226,11 @@ unsigned int Font::draw(const std::wstring& text, bool darken, bool useBuilder)
                     colorIndex += 16;
                 const int color = mColors[colorIndex];
                 GlStateManager::color3f(1.0f, 1.0f, 1.0f);
+#ifdef MINECRAFT_PC
+                builder->color(color >> 16 & 255, color >> 8 & 255, color & 255, textAlpha);
+#else
                 builder->color(color >> 16 & 255, color >> 8 & 255, color & 255);
+#endif
             }
             i += 2;
         }
@@ -279,7 +287,16 @@ unsigned int Font::draw(const std::wstring& text, int x, int y, int color, bool 
                                 (color >> 24 & 255) / 255.0f);
         mX = static_cast<float>(x);
         mY = static_cast<float>(y);
+#ifdef MINECRAFT_PC
+        textAlpha = (color >> 24) & 255;
+        if (textAlpha == 0)
+            textAlpha = 255;
+        unsigned int result = draw(text, darken, useBuilder);
+        textAlpha = 255;
+        return result;
+#else
         return draw(text, darken, useBuilder);
+#endif
     }
     return 1;
 }

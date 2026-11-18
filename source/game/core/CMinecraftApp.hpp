@@ -197,7 +197,11 @@ enum eGameExtraData
     eGameExtraData_SaveVersion,
     eGameExtraData_All
 };
+#ifdef MINECRAFT_PC
+const unsigned int EXTRA_DATA_SAVE_BUILD = 2178;
+#else
 const unsigned int EXTRA_DATA_SAVE_BUILD = 2177;
+#endif
 const unsigned int EXTRA_DATA_SAVE_VERSION = 11;
 enum eGameMode
 {

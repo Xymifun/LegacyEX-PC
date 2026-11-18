@@ -22,6 +22,11 @@
 #include "game/world/LevelRuleset.hpp"
 #include "game/ui/UILayer.hpp"
 #include "game/ui/fuiFile.hpp"
+#ifdef MINECRAFT_PC
+#include "game/ui/FJ_FuiNode.hpp"
+#include "game/ui/FJ_List.hpp"
+#include "game/ui/fuiRenderNode.hpp"
+#endif
 
 extern ConsoleUIController gConsoleUIController;
 
@@ -152,6 +157,10 @@ void UIScene_MapSelectMenu::_init()
         m_mapList.SetCheckbox(m_mapList.getItemCount() - 2, true);
         m_mapList.SetCheckbox(m_mapList.getItemCount() - 1, true);
     }
+#ifdef MINECRAFT_PC
+    if (m_mapList.getFuiRenderNode() != NULL && m_mapList.getFuiRenderNode()->getFuiNode()->asFJ_List() != NULL)
+        m_mapList.getFuiRenderNode()->getFuiNode()->asFJ_List()->PcWrapEnds();
+#endif
     gConsoleUIController.TouchBoxRebuild(this);
     m_mapInfoPending = 1;
 }

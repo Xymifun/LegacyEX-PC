@@ -10,6 +10,10 @@
 #include "game/core/Minecraft.hpp"
 #include "game/world/block/MaterialShaders.hpp"
 
+#ifdef MINECRAFT_PC
+#include "platform/pc/PcDisplay.hpp"
+#endif
+
 static bool convertQuadsToTriangles = false;
 static bool tryVBO = false;
 
@@ -50,6 +54,10 @@ BufferBuilder::BufferBuilder(int bufferSize)
 
     mRawBuffer = new arrayWithLength<int>(bufferSize, true);
     mBuckets = new arrayWithLength<unsigned char>(bufferSize / 8, true);
+#ifdef MINECRAFT_PC
+    mQuadElements = new arrayWithLength<unsigned short>(bufferSize / 8, true);
+    mQuadElement = 0;
+#endif
 
     mUseVBO = tryVBO;
     if (mUseVBO)
@@ -170,6 +178,9 @@ void BufferBuilder::end()
         }
         else if (mUseCompactVertices)
         {
+#ifdef MINECRAFT_PC
+            PcSetQuadElements(mQuadElements->data);
+#endif
             gRenderer->DrawVertices((C4JRender::ePrimitiveType)mDrawMode, mVertexCount, rawBuffer, mVertexType,
                                     mPixelShaderType, mBuckets->data);
         }
@@ -309,6 +320,13 @@ void BufferBuilder::bucket(int index)
     mBucket = index;
 }
 
+#ifdef MINECRAFT_PC
+void BufferBuilder::quadElement(int element)
+{
+    mQuadElement = (unsigned short)element;
+}
+#endif
+
 void BufferBuilder::offset(float x, float y, float z)
 {
     mXOffset = x;
@@ -374,6 +392,9 @@ void BufferBuilder::vertexNoBounds(float x, float y, float z)
             }
 
             mBuckets->data[mVertexCount / 4 - 1] = (unsigned char)mBucket;
+#ifdef MINECRAFT_PC
+            mQuadElements->data[mVertexCount / 4 - 1] = mQuadElement;
+#endif
             mBucket = 0;
         }
 

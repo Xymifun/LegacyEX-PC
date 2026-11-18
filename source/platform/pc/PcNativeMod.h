@@ -180,7 +180,9 @@ enum
     PC_NATIVE_PAD_LEFT = 1 << 14,
     PC_NATIVE_PAD_RIGHT = 1 << 15,
     PC_NATIVE_PAD_CHAT = 1 << 16,   /* not a GamePad button: opens the chat line, as T does */
-    PC_NATIVE_PAD_SNEAK = 1 << 17   /* not a GamePad button: sneaks while held, as Shift does (STICK_R toggles) */
+    PC_NATIVE_PAD_SNEAK = 1 << 17,  /* not a GamePad button: sneaks while held, as Shift does (STICK_R toggles) */
+    PC_NATIVE_PAD_SPRINT = 1 << 18  /* not a GamePad button: sprints while held, as the sprint key does, but in
+                                       whichever way the left stick moves the player (not only straight ahead) */
 };
 
 /* parts of the HUD, for hideHud and hudRect */
@@ -402,10 +404,11 @@ typedef struct PcNativeHost
     void (*drawText)(const char* utf8, int x, int y, unsigned int argb);  /* with a shadow; 9 units high */
     int (*textWidth)(const char* utf8);                                    /* in the same units */
     /* main thread: while on, a container the server opens for the first player (chest, furnace, brewing
-     * stand, hopper, dispenser, dropper, shulker box, and the crafting table's 3x3 grid menu,
-     * CraftingMenu) gets its menu (mContainerMenu) but no screen; the
-     * mod reads its slots and clicks them (MultiPlayerGameMode::handleInventoryMouseClick) and closes it
-     * (closeContainer). Other menus still show. */
+     * stand, hopper, dispenser, dropper, shulker box, beacon, and the crafting table's, enchanting table's
+     * and anvil's menus: CraftingMenu, EnchantmentMenu, AnvilMenu) gets its menu (mContainerMenu) but no
+     * screen; the mod reads its slots and clicks them (MultiPlayerGameMode::handleInventoryMouseClick, and
+     * handleInventoryButtonClick for the enchanting table's choices) and closes it (closeContainer). Other
+     * menus still show. */
     void (*setHideMenus)(int on);
     /* main thread: a key of the keyboard pressed (down 1) or let go (0), as Windows' virtual-key codes, and
      * a typed character, as the keyboard gives them to the game */
@@ -464,6 +467,10 @@ typedef struct PcNativeHost
     /* main thread: the mod's textures/FILE (a PNG) as a texture for GlStateManager::bindTexture, loaded once;
        0 when it can not be read */
     int (*loadTexture)(const char* file);
+    /* main thread: one of the game's own custom payload packets to the host, as its screens send them
+       (for example "MC|Beacon": the beacon's effects, two ints), with the channel name as it is; dropped
+       while the player is not connected to a world */
+    void (*sendPayload)(const char* channel, const void* data, int size);
 } PcNativeHost;
 
 /* The mod's entry point: 0 when it started; anything else and the game unloads it. */

@@ -1,5 +1,8 @@
 #include "game/network/CGameNetworkManager.hpp"
 #ifdef MINECRAFT_PC
+#include "platform/pc/PcTextureOverride.hpp"
+#endif
+#ifdef MINECRAFT_PC
 #include "platform/pc/PcDedicated.hpp"
 #include "platform/pc/PcTutorials.hpp"
 #endif
@@ -1034,7 +1037,13 @@ int CGameNetworkManager::ExitAndJoinFromInviteThreadProc(void* data)
     Minecraft* minecraft = Minecraft::GetInstance();
     TexturePack* previousSelected = Minecraft::GetInstance()->mTexturePackRepository->getSelected();
     previousSelected->hasAudio();
+#ifdef MINECRAFT_PC
+    PcTextureOverrideSkip(true);
+#endif
     minecraft->mTexturePackRepository->selectTexturePackById(0, false);
+#ifdef MINECRAFT_PC
+    PcTextureOverrideSkip(false);
+#endif
     const bool hasAudio = previousSelected->hasAudio();
     if (!hasAudio)
     {

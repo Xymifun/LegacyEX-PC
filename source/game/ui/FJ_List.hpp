@@ -55,6 +55,7 @@ public:
 #ifdef MINECRAFT_PC
     void PcPressSlider(int x, int y);
     void PcHoverItem(int y);
+    void PcWrapEnds();
 #endif
     uint32_t CanTouchFocus(int x, int y);
     void BlockTouchTrigger(bool block);

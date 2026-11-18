@@ -97,6 +97,12 @@ public:
     void setupCameraInsideAreas(boost::shared_ptr<Entity> camera);
     unsigned int clippedByCameraInsideAreas(ClipChunk* chunk);
     int renderChunks(int first, int count, int layer, double partialTick);
+#ifdef MINECRAFT_PC
+    int renderShadowChunks(int layer, double partialTick, float distance, const float* shadowView,
+                           const float* shadowProjection);
+    int renderShadowEntities(double partialTick, float distance, const float* shadowView,
+                             const float* shadowProjection, bool entities, bool player, bool blockEntities);
+#endif
     void render(boost::shared_ptr<Entity> camera, int layer, double partialTick, bool sort);
     void renderSky(float partialTick);
     void renderHaloRing(float partialTick);

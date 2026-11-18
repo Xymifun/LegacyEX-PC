@@ -8,6 +8,7 @@ namespace PcGl
 {
 #define PC_GL_DEFINE(type, name) type name = 0;
 PC_GL_FUNCTIONS(PC_GL_DEFINE)
+PC_GL_OPTIONAL_FUNCTIONS(PC_GL_DEFINE)
 #undef PC_GL_DEFINE
 
 bool Load()
@@ -22,6 +23,9 @@ bool Load()
     }
     PC_GL_FUNCTIONS(PC_GL_LOAD)
 #undef PC_GL_LOAD
+#define PC_GL_LOAD_OPTIONAL(type, name) name = reinterpret_cast<type>(PcOsGlGetProcAddress("gl" #name));
+    PC_GL_OPTIONAL_FUNCTIONS(PC_GL_LOAD_OPTIONAL)
+#undef PC_GL_LOAD_OPTIONAL
     return complete;
 }
 }
