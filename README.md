@@ -1,11 +1,10 @@
 # MinecraftLegacyEX-PC-source
 
-Source code of the PC version for LegacyEX, which is a TU74 PC Port of Minecraft Legacy Edition by 4J Studios. Keep in mind this build is barebones and mostly for developers to look at closer
-To keep this legal, no game files are included and you need your Wii U Edition files to access this open-source version of the game
+Source code of the PC version for LegacyEX, which is a TU75+ PC Port of Minecraft Legacy Edition by 4J Studios. Keep in mind this page is for developers to look at and is not the official download
+(To keep this LEGAL, no game files are included and you need your Wii U Edition files to access this open-source project)
 
 ## What you need on Windows
 
-Building on Windows isn't tested, and since I made this on Arch Linux it's currently only guaranteed for Arch Linux.
 For Windows: Get the prebuilt zip from the Releases page instead, which has the game, prepare.py and a README.txt with the basic steps
 
 ## What you need on Linux
@@ -56,11 +55,13 @@ Fullscreen support
 
 F3 menu
 
+F1 toggle
+
 Compatible with most keyboard/mouse capabilities
 
 Compatible with various controllers (for the Wii U, PS3, PS4, Xbox 360, Xbox One, etc.)
 
-Added a scuffed in-game keyboard for controller users
+Added an in-game keyboard for controller users
 
 FOV can be changed from 30 to 100
 
@@ -78,6 +79,8 @@ Split-screen works
 
 Added LCEOnline support (later added Online Multiplayer features, but it should still work here)
 
+Player UUID's are encrypted in-game so a hacker can't take yours
+
 Changed every single mention of the intended device to "Legacy Edition" and "PC"
 
 Java-style chat (my best attempt)
@@ -92,7 +95,7 @@ Rendering fixes to banners, Horses, Fish, Drowned, Phantoms, UI masks, distant t
 
 Fixed visual bug with End Rod in Creative menu
 
-Performance adjustments
+Very extensive performance adjustments
 
 Saving should be 20x faster
 
@@ -148,7 +151,7 @@ Brought back the native Voice Chat
 
 Game Chat has been changed to Voice Chat, and you are able to configure your input and output settings
 
-There is a new Proximity Chat setting
+There is a Proximity Chat setting
 
 Hosts can force or disable Proximity Chat in-game
 
@@ -158,7 +161,21 @@ Splitscreen players (Player2, Player3, Player4) now have persistent saves
 
 You can change the names of splitscreen players in their identity files (AppData --> Roaming)
 
-Basic mod support
+Extensive mod support
+
+Real in-game friends list as an alternative to Discord commands
+
+Shader Support (in Graphics) for real Java Edition shaders
+
+Texture Override menu in Graphics where you can select Texture Packs based off personal preference instead of being forced by maps and minigames
+
+Added option in Texture Override where you can also force default music to play, instead of the Texture Pack's native music
+
+Fixed visuals that were forced at 16:9, for players with different aspect ratios
+
+Controller users can open chat natively (hold the button that normally opens the player list instead of clicking once)
+
+Very small QoL adjustment for the Minigame Maps list and Map Vote list (loops at top and bottom)
 
 ## Customizable Golden Age options (personal favorite):
 
@@ -216,7 +233,7 @@ If you have a "MinecraftLegacyEX-PC-assets.zip" file, you can use "python3 tools
 
 This was made from an unfinished decompilation released by Jacobwasbeast at https://github.com/Jacobwasbeast/mcwiiu-reconstructed. The edited version is also known as "LCEReborn"
 
-The decompilation was made with AI, which this PC Port is built from, so consider this build touched by Generative AI by default unlike other purely human-coded versions like neoLegacy.
+The decompilation was made with AI, which this PC Port is built on top of, so consider this build touched by Generative AI by default unlike other purely human-coded versions like neoLegacy. Despite this, after extensive playtesting there are no more quirks from the decompilation left.
 
 For a detailed list for parts I got additional help with (keep in mind this list was made after I finished, from memory):
 ###### Initially tearing out all the load-bearing Wii U-dependent stuff so it can boot on PC
@@ -243,3 +260,6 @@ For a detailed list for parts I got additional help with (keep in mind this list
 ###### Small help with skin animation fallbacks (for Emerald Launcher Skins)
 ###### Basic Python script that downloads the open-source libraries both builds compile against (deps.py) is from LCEReborn
 ###### Sample native mod
+###### Using LCEReborn's code as reference for making Java shaders also compatible
+###### Using LCEReborn's code for shader options
+###### Fixing big issues with shader
