@@ -177,6 +177,8 @@ Controller users can open chat natively (hold the button that normally opens the
 
 Very small QoL adjustment for the Minigame Maps list and Map Vote list (loops at top and bottom)
 
+Real authentic Leaderboards added in-game that weren't from the Wii U Edition, with 1:1 functionality
+
 ## Customizable Golden Age options (personal favorite):
 
 Old block textures, item visuals, models (pig, boat, bed, chest, Enderman) and sounds (hurt, bow, explosion, doors, TNT)
@@ -233,7 +235,7 @@ If you have a "MinecraftLegacyEX-PC-assets.zip" file, you can use "python3 tools
 
 This was made from an unfinished decompilation released by Jacobwasbeast at https://github.com/Jacobwasbeast/mcwiiu-reconstructed. The edited version is also known as "LCEReborn"
 
-The decompilation was made with AI, which this PC Port is built on top of, so consider this build touched by Generative AI by default unlike other purely human-coded versions like neoLegacy. Despite this, after extensive playtesting there are no more quirks from the decompilation left.
+The decompilation was made with AI, which this PC Port is built on top of, so consider this build touched by Generative AI by default unlike other purely human-coded versions like neoLegacy. Despite this, after extensive playtesting there are no more reported quirks from the decompilation left.
 
 For a detailed list for parts I got additional help with (keep in mind this list was made after I finished, from memory):
 ###### Initially tearing out all the load-bearing Wii U-dependent stuff so it can boot on PC
