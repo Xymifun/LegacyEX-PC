@@ -179,6 +179,8 @@ Very small QoL adjustment for the Minigame Maps list and Map Vote list (loops at
 
 Real authentic Leaderboards added in-game that weren't from the Wii U Edition, with 1:1 functionality
 
+Real TU75 update, with 1:1 accuracy by checking the changes in the raw TU73 --> TU74 --> TU75 Xbox 360 files
+
 ## Customizable Golden Age options (personal favorite):
 
 Old block textures, item visuals, models (pig, boat, bed, chest, Enderman) and sounds (hurt, bow, explosion, doors, TNT)
