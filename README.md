@@ -227,7 +227,7 @@ Checking Public Minigames shows an "(X Available)" label next to them so you don
 
 # Note
 
-Keep in mind this is barebones for developers who want a proper look at the source code (to check up on what's under the hood and how reliable the code is).
+Keep in mind this is for developers who want a proper look at the source code (to check up on what's under the hood and how reliable the code is).
 
 Various things like the TU0 files, extra tutorial worlds, title logos, panoramas and other optional cosmetic content aren't included on this page due to copyright
 
